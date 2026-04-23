@@ -1,7 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ADMIN_PRODUCTS_KEY, makeProductId, normalizeCatalogProduct } from "../data/productCatalog";
+
+const AUTH_STORAGE_KEY = "vrinda.currentUser";
 
 const STORAGE_KEYS = {
-  products: "vrinda.admin.products",
+  products: ADMIN_PRODUCTS_KEY,
   orders: "vrinda.admin.orders"
 };
 
@@ -29,12 +33,7 @@ const readStore = (key) => {
   }
 };
 
-const normalizeProduct = (product) => ({
-  ...product,
-  unitsAvailable: Number.isFinite(Number(product.unitsAvailable)) ? Math.max(0, Number(product.unitsAvailable)) : 0,
-  onSale: Boolean(product.onSale),
-  salePercent: Number.isFinite(Number(product.salePercent)) ? Math.max(0, Number(product.salePercent)) : 0
-});
+const normalizeProduct = (product) => normalizeCatalogProduct(product);
 
 const getEffectivePrice = (product) => {
   const basePrice = Number(product.price) || 0;
@@ -46,21 +45,61 @@ const getEffectivePrice = (product) => {
 };
 
 export default function AdminPage() {
+  const navigate = useNavigate();
+  const [hasAccess, setHasAccess] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   const [activeSection, setActiveSection] = useState("overview");
   const [products, setProducts] = useState(() => readStore(STORAGE_KEYS.products).map(normalizeProduct));
   const [orders, setOrders] = useState(() => readStore(STORAGE_KEYS.orders));
   const [productStatus, setProductStatus] = useState("");
   const [orderStatusMsg, setOrderStatusMsg] = useState("");
   const [preview, setPreview] = useState({ src: "", text: "No image selected." });
+  const [additionalPreviews, setAdditionalPreviews] = useState([]);
+  const [featureInput, setFeatureInput] = useState("");
+
+  useEffect(() => {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) {
+      setHasAccess(false);
+      setAuthChecked(true);
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    try {
+      const user = JSON.parse(raw);
+      if (user?.role === "admin") {
+        setHasAccess(true);
+        setAuthChecked(true);
+        return;
+      }
+    } catch {
+      // Invalid auth payload falls through to redirect.
+    }
+
+    setHasAccess(false);
+    setAuthChecked(true);
+    navigate("/login", { replace: true });
+  }, [navigate]);
 
   const [productForm, setProductForm] = useState({
     name: "",
+    category: "Soaps",
     price: "",
+    tagline: "",
     units: 0,
     salePercent: 0,
     onSale: false,
     description: "",
-    imageDataUrl: ""
+    mainImageDataUrl: "",
+    additionalImageDataUrls: [],
+    features: ["Deep cleansing", "Skin nourishing"],
+    ingredients: "",
+    howToUse: "",
+    type: "",
+    weightVolume: "",
+    skinConcern: "",
+    rating: ""
   });
 
   const [orderForm, setOrderForm] = useState({
@@ -70,9 +109,14 @@ export default function AdminPage() {
     status: "pending"
   });
 
+  if (!authChecked || !hasAccess) {
+    return null;
+  }
+
   const persist = (nextProducts, nextOrders) => {
     localStorage.setItem(STORAGE_KEYS.products, JSON.stringify(nextProducts));
     localStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(nextOrders));
+    window.dispatchEvent(new Event("vrinda-products-changed"));
     setProducts(nextProducts);
     setOrders(nextOrders);
   };
@@ -142,12 +186,21 @@ export default function AdminPage() {
   const addProduct = (event) => {
     event.preventDefault();
     const name = productForm.name.trim();
+    const category = productForm.category.trim();
+    const tagline = productForm.tagline.trim();
     const description = productForm.description.trim();
+    const ingredients = productForm.ingredients.trim();
+    const howToUse = productForm.howToUse.trim();
+    const type = productForm.type.trim();
+    const weightVolume = productForm.weightVolume.trim();
+    const skinConcern = productForm.skinConcern.trim();
     const price = Number(productForm.price);
     const unitsAvailable = Number(productForm.units);
     const salePercent = Number(productForm.salePercent);
+    const rating = Number(productForm.rating);
+    const features = productForm.features.map((item) => item.trim()).filter(Boolean);
 
-    if (!name || !description || !Number.isFinite(price) || price < 1) {
+    if (!name || !category || !tagline || !description || !Number.isFinite(price) || price < 1) {
       setProductStatus("Please fill all product fields correctly.");
       return;
     }
@@ -163,29 +216,76 @@ export default function AdminPage() {
       setProductStatus("Enter a sale discount above 0 when sale is enabled.");
       return;
     }
-    if (!productForm.imageDataUrl) {
+    if (!productForm.mainImageDataUrl) {
       setProductStatus("Upload an image from your device before saving.");
       return;
     }
+    if (!ingredients || !howToUse || !type || !weightVolume || !skinConcern) {
+      setProductStatus("Please complete ingredients, how to use, and product details sections.");
+      return;
+    }
+    if (!features.length) {
+      setProductStatus("Add at least one feature/benefit.");
+      return;
+    }
+    if (productForm.rating && (!Number.isFinite(rating) || rating < 0 || rating > 5)) {
+      setProductStatus("Rating must be between 0 and 5.");
+      return;
+    }
+
+    const images = [productForm.mainImageDataUrl, ...productForm.additionalImageDataUrls].filter(Boolean);
 
     const nextProducts = [
       {
-        id: `prod_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
+        id: makeProductId(name),
         name,
+        category,
+        tagline,
         description,
         price,
         unitsAvailable,
         onSale: productForm.onSale,
         salePercent,
-        imageDataUrl: productForm.imageDataUrl
+        rating: Number.isFinite(rating) ? rating : 4.6,
+        reviewCount: 0,
+        features,
+        ingredients,
+        howToUse,
+        type,
+        weightVolume,
+        skinConcern,
+        mainImageDataUrl: productForm.mainImageDataUrl,
+        additionalImageDataUrls: productForm.additionalImageDataUrls,
+        imageDataUrl: productForm.mainImageDataUrl,
+        images
       },
       ...products
     ];
 
     persist(nextProducts, orders);
     setProductStatus("Product saved successfully.");
-    setProductForm({ name: "", price: "", units: 0, salePercent: 0, onSale: false, description: "", imageDataUrl: "" });
+    setProductForm({
+      name: "",
+      category: "Soaps",
+      price: "",
+      tagline: "",
+      units: 0,
+      salePercent: 0,
+      onSale: false,
+      description: "",
+      mainImageDataUrl: "",
+      additionalImageDataUrls: [],
+      features: ["Deep cleansing", "Skin nourishing"],
+      ingredients: "",
+      howToUse: "",
+      type: "",
+      weightVolume: "",
+      skinConcern: "",
+      rating: ""
+    });
     setPreview({ src: "", text: "No image selected." });
+    setAdditionalPreviews([]);
+    setFeatureInput("");
   };
 
   const removeProduct = (id) => {
@@ -265,11 +365,11 @@ export default function AdminPage() {
     setOrderStatusMsg("Order deleted.");
   };
 
-  const handleImage = (event) => {
+  const handleMainImage = (event) => {
     const file = event.target.files?.[0];
     if (!file) {
       setPreview({ src: "", text: "No image selected." });
-      setProductForm((old) => ({ ...old, imageDataUrl: "" }));
+      setProductForm((old) => ({ ...old, mainImageDataUrl: "" }));
       return;
     }
     if (!file.type.startsWith("image/")) {
@@ -281,11 +381,54 @@ export default function AdminPage() {
     reader.onload = () => {
       const src = String(reader.result || "");
       setPreview({ src, text: file.name });
-      setProductForm((old) => ({ ...old, imageDataUrl: src }));
+      setProductForm((old) => ({ ...old, mainImageDataUrl: src }));
       setProductStatus("Image ready. Submit the form to save product.");
     };
     reader.onerror = () => setProductStatus("Failed to read image file.");
     reader.readAsDataURL(file);
+  };
+
+  const handleAdditionalImages = (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) {
+      setProductForm((old) => ({ ...old, additionalImageDataUrls: [] }));
+      setAdditionalPreviews([]);
+      return;
+    }
+    if (files.some((file) => !file.type.startsWith("image/"))) {
+      setProductStatus("Additional images must be valid image files.");
+      return;
+    }
+
+    Promise.all(
+      files.map(
+        (file) =>
+          new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ name: file.name, src: String(reader.result || "") });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          })
+      )
+    )
+      .then((entries) => {
+        setAdditionalPreviews(entries);
+        setProductForm((old) => ({ ...old, additionalImageDataUrls: entries.map((entry) => entry.src) }));
+      })
+      .catch(() => setProductStatus("Could not process additional images."));
+  };
+
+  const addFeaturePoint = () => {
+    const value = featureInput.trim();
+    if (!value) {
+      return;
+    }
+    setProductForm((old) => ({ ...old, features: [...old.features, value] }));
+    setFeatureInput("");
+  };
+
+  const removeFeaturePoint = (index) => {
+    setProductForm((old) => ({ ...old, features: old.features.filter((_, idx) => idx !== index) }));
   };
 
   return (
@@ -350,89 +493,263 @@ export default function AdminPage() {
             <section className="grid gap-3 xl:grid-cols-[1.08fr_0.92fr]">
               <article className="glass-card p-5">
                 <h3 className="font-display text-4xl font-semibold text-sage-800">Add Product</h3>
-                <form onSubmit={addProduct} className="mt-4 grid gap-3 md:grid-cols-2">
-                  <label className="text-sm font-bold text-sage-800">
-                    Product Name
-                    <input
-                      value={productForm.name}
-                      onChange={(e) => setProductForm((old) => ({ ...old, name: e.target.value }))}
-                      className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
-                      required
-                    />
-                  </label>
-                  <label className="text-sm font-bold text-sage-800">
-                    Price (INR)
-                    <input
-                      type="number"
-                      min="1"
-                      value={productForm.price}
-                      onChange={(e) => setProductForm((old) => ({ ...old, price: e.target.value }))}
-                      className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
-                      required
-                    />
-                  </label>
-                  <label className="text-sm font-bold text-sage-800">
-                    Units Available
-                    <input
-                      type="number"
-                      min="0"
-                      value={productForm.units}
-                      onChange={(e) => setProductForm((old) => ({ ...old, units: e.target.value }))}
-                      className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
-                      required
-                    />
-                  </label>
-                  <label className="text-sm font-bold text-sage-800">
-                    Sale Discount (%)
-                    <input
-                      type="number"
-                      min="0"
-                      max="90"
-                      value={productForm.salePercent}
-                      onChange={(e) => setProductForm((old) => ({ ...old, salePercent: e.target.value }))}
-                      className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
-                    />
-                  </label>
-                  <label className="md:col-span-2 inline-flex items-center gap-2 text-sm font-semibold text-sage-700">
-                    <input
-                      type="checkbox"
-                      checked={productForm.onSale}
-                      onChange={(e) => setProductForm((old) => ({ ...old, onSale: e.target.checked }))}
-                    />
-                    Mark this product as on sale
-                  </label>
-                  <label className="md:col-span-2 text-sm font-bold text-sage-800">
-                    Description
-                    <textarea
-                      value={productForm.description}
-                      onChange={(e) => setProductForm((old) => ({ ...old, description: e.target.value }))}
-                      className="mt-1 min-h-24 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
-                      required
-                    />
-                  </label>
-                  <label className="md:col-span-2 text-sm font-bold text-sage-800">
-                    Product Image (from device)
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImage}
-                      className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2"
-                      required
-                    />
-                  </label>
+                <form onSubmit={addProduct} className="mt-4 space-y-3">
+                  <section className="rounded-2xl border border-sage-200/80 bg-white/70 p-4">
+                    <h4 className="text-xs font-extrabold uppercase tracking-[0.14em] text-sage-700">Basic Details</h4>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <label className="text-sm font-bold text-sage-800">
+                        Product Name
+                        <input
+                          value={productForm.name}
+                          onChange={(e) => setProductForm((old) => ({ ...old, name: e.target.value }))}
+                          className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
+                          required
+                        />
+                      </label>
+                      <label className="text-sm font-bold text-sage-800">
+                        Category
+                        <select
+                          value={productForm.category}
+                          onChange={(e) => setProductForm((old) => ({ ...old, category: e.target.value }))}
+                          className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
+                        >
+                          <option>Soaps</option>
+                          <option>Candles</option>
+                          <option>Bath & Body</option>
+                          <option>Gift Sets / Accessories</option>
+                          <option>Herbal Care</option>
+                        </select>
+                      </label>
+                      <label className="text-sm font-bold text-sage-800">
+                        Price (INR)
+                        <input
+                          type="number"
+                          min="1"
+                          value={productForm.price}
+                          onChange={(e) => setProductForm((old) => ({ ...old, price: e.target.value }))}
+                          className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
+                          required
+                        />
+                      </label>
+                      <label className="text-sm font-bold text-sage-800">
+                        Short Tagline
+                        <input
+                          value={productForm.tagline}
+                          onChange={(e) => setProductForm((old) => ({ ...old, tagline: e.target.value }))}
+                          className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
+                          required
+                        />
+                      </label>
+                    </div>
+                  </section>
 
-                  <div className="md:col-span-2 flex items-center gap-3 text-sm text-sage-600">
-                    {preview.src ? <img src={preview.src} alt="preview" className="h-14 w-14 rounded-lg object-cover" /> : null}
-                    <span>{preview.text}</span>
-                  </div>
+                  <section className="rounded-2xl border border-sage-200/80 bg-white/70 p-4">
+                    <h4 className="text-xs font-extrabold uppercase tracking-[0.14em] text-sage-700">Images</h4>
+                    <div className="mt-3 grid gap-3">
+                      <label className="text-sm font-bold text-sage-800">
+                        Main Product Image
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleMainImage}
+                          className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2"
+                          required
+                        />
+                      </label>
+                      <div className="flex items-center gap-3 text-sm text-sage-600">
+                        {preview.src ? <img src={preview.src} alt="preview" className="h-14 w-14 rounded-lg object-cover" /> : null}
+                        <span>{preview.text}</span>
+                      </div>
+                      <label className="text-sm font-bold text-sage-800">
+                        Additional Images (thumbnails)
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={handleAdditionalImages}
+                          className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2"
+                        />
+                      </label>
+                      {!!additionalPreviews.length && (
+                        <div className="flex flex-wrap gap-2">
+                          {additionalPreviews.map((item) => (
+                            <img key={item.src} src={item.src} alt={item.name} className="h-14 w-14 rounded-lg object-cover" />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </section>
 
-                  <div className="md:col-span-2 flex flex-wrap gap-2">
+                  <section className="rounded-2xl border border-sage-200/80 bg-white/70 p-4">
+                    <h4 className="text-xs font-extrabold uppercase tracking-[0.14em] text-sage-700">Description</h4>
+                    <label className="mt-3 block text-sm font-bold text-sage-800">
+                      Long Description
+                      <textarea
+                        value={productForm.description}
+                        onChange={(e) => setProductForm((old) => ({ ...old, description: e.target.value }))}
+                        className="mt-1 min-h-24 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
+                        required
+                      />
+                    </label>
+                  </section>
+
+                  <section className="rounded-2xl border border-sage-200/80 bg-white/70 p-4">
+                    <h4 className="text-xs font-extrabold uppercase tracking-[0.14em] text-sage-700">Features / Benefits</h4>
+                    <div className="mt-3 flex gap-2">
+                      <input
+                        value={featureInput}
+                        onChange={(e) => setFeatureInput(e.target.value)}
+                        className="w-full rounded-xl border border-sage-200 bg-white px-3 py-2 text-sm outline-none focus:border-sage-400"
+                        placeholder="Add feature point"
+                      />
+                      <button type="button" onClick={addFeaturePoint} className="rounded-full bg-sage-700 px-4 py-2 text-xs font-extrabold text-white">
+                        Add
+                      </button>
+                    </div>
+                    <div className="mt-3 grid gap-2">
+                      {productForm.features.map((feature, idx) => (
+                        <div key={`${feature}-${idx}`} className="flex items-center justify-between rounded-xl border border-sage-200 bg-white px-3 py-2">
+                          <span className="text-sm font-semibold text-sage-700">{feature}</span>
+                          <button type="button" onClick={() => removeFeaturePoint(idx)} className="text-xs font-bold text-rose-700">
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
+                  <section className="rounded-2xl border border-sage-200/80 bg-white/70 p-4">
+                    <h4 className="text-xs font-extrabold uppercase tracking-[0.14em] text-sage-700">Ingredients & Usage</h4>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <label className="text-sm font-bold text-sage-800">
+                        Ingredients
+                        <textarea
+                          value={productForm.ingredients}
+                          onChange={(e) => setProductForm((old) => ({ ...old, ingredients: e.target.value }))}
+                          className="mt-1 min-h-20 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
+                          required
+                        />
+                      </label>
+                      <label className="text-sm font-bold text-sage-800">
+                        How to Use
+                        <textarea
+                          value={productForm.howToUse}
+                          onChange={(e) => setProductForm((old) => ({ ...old, howToUse: e.target.value }))}
+                          className="mt-1 min-h-20 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
+                          required
+                        />
+                      </label>
+                    </div>
+                  </section>
+
+                  <section className="rounded-2xl border border-sage-200/80 bg-white/70 p-4">
+                    <h4 className="text-xs font-extrabold uppercase tracking-[0.14em] text-sage-700">Product Details</h4>
+                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      <label className="text-sm font-bold text-sage-800">
+                        Type
+                        <input
+                          value={productForm.type}
+                          onChange={(e) => setProductForm((old) => ({ ...old, type: e.target.value }))}
+                          className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
+                          required
+                        />
+                      </label>
+                      <label className="text-sm font-bold text-sage-800">
+                        Weight / Volume
+                        <input
+                          value={productForm.weightVolume}
+                          onChange={(e) => setProductForm((old) => ({ ...old, weightVolume: e.target.value }))}
+                          className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
+                          required
+                        />
+                      </label>
+                      <label className="text-sm font-bold text-sage-800">
+                        Skin Type / Concern
+                        <input
+                          value={productForm.skinConcern}
+                          onChange={(e) => setProductForm((old) => ({ ...old, skinConcern: e.target.value }))}
+                          className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
+                          required
+                        />
+                      </label>
+                    </div>
+                  </section>
+
+                  <section className="rounded-2xl border border-sage-200/80 bg-white/70 p-4">
+                    <h4 className="text-xs font-extrabold uppercase tracking-[0.14em] text-sage-700">Pricing, Stock & Extras</h4>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <label className="text-sm font-bold text-sage-800">
+                        Stock Quantity
+                        <input
+                          type="number"
+                          min="0"
+                          value={productForm.units}
+                          onChange={(e) => setProductForm((old) => ({ ...old, units: e.target.value }))}
+                          className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
+                          required
+                        />
+                      </label>
+                      <label className="text-sm font-bold text-sage-800">
+                        Rating (0 to 5, optional)
+                        <input
+                          type="number"
+                          min="0"
+                          max="5"
+                          step="0.1"
+                          value={productForm.rating}
+                          onChange={(e) => setProductForm((old) => ({ ...old, rating: e.target.value }))}
+                          className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
+                        />
+                      </label>
+                      <label className="md:col-span-2 text-sm font-bold text-sage-800">
+                        Sale Discount (%)
+                        <input
+                          type="number"
+                          min="0"
+                          max="90"
+                          value={productForm.salePercent}
+                          onChange={(e) => setProductForm((old) => ({ ...old, salePercent: e.target.value }))}
+                          className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
+                        />
+                      </label>
+                      <label className="md:col-span-2 inline-flex items-center gap-2 text-sm font-semibold text-sage-700">
+                        <input
+                          type="checkbox"
+                          checked={productForm.onSale}
+                          onChange={(e) => setProductForm((old) => ({ ...old, onSale: e.target.checked }))}
+                        />
+                        Mark this product as on sale
+                      </label>
+                    </div>
+                  </section>
+
+                  <div className="flex flex-wrap gap-2">
                     <button className="rounded-full bg-sage-700 px-4 py-2 text-xs font-extrabold text-white">Save Product</button>
                     <button
                       type="button"
                       onClick={() => {
-                        setProductForm({ name: "", price: "", units: 0, salePercent: 0, onSale: false, description: "", imageDataUrl: "" });
+                        setProductForm({
+                          name: "",
+                          category: "Soaps",
+                          price: "",
+                          tagline: "",
+                          units: 0,
+                          salePercent: 0,
+                          onSale: false,
+                          description: "",
+                          mainImageDataUrl: "",
+                          additionalImageDataUrls: [],
+                          features: ["Deep cleansing", "Skin nourishing"],
+                          ingredients: "",
+                          howToUse: "",
+                          type: "",
+                          weightVolume: "",
+                          skinConcern: "",
+                          rating: ""
+                        });
                         setPreview({ src: "", text: "No image selected." });
+                        setAdditionalPreviews([]);
+                        setFeatureInput("");
                         setProductStatus("Form reset.");
                       }}
                       className="pill-btn"
@@ -441,7 +758,7 @@ export default function AdminPage() {
                     </button>
                   </div>
 
-                  <p className="md:col-span-2 min-h-5 text-sm font-bold text-sage-700">{productStatus}</p>
+                  <p className="min-h-5 text-sm font-bold text-sage-700">{productStatus}</p>
                 </form>
               </article>
 

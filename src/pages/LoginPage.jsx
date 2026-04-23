@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
-
-const STORAGE_KEY = "vrinda.demoAccount";
+import { apiRequest } from "../data/apiClient";
+import { setAuthSession } from "../data/authStorage";
 
 const slides = [
   "https://images.unsplash.com/photo-1608571423539-e951a5f2f25f?auto=format&fit=crop&w=1200&q=80",
@@ -10,10 +11,13 @@ const slides = [
 ];
 
 export default function LoginPage() {
+  const location = useLocation();
   const [tab, setTab] = useState("signin");
   const [slideIndex, setSlideIndex] = useState(0);
   const [signinStatus, setSigninStatus] = useState("");
   const [signupStatus, setSignupStatus] = useState("");
+  const [signinLoading, setSigninLoading] = useState(false);
+  const [signupLoading, setSignupLoading] = useState(false);
   const [toast, setToast] = useState({ show: false, kind: "success", text: "" });
 
   const [signinForm, setSigninForm] = useState({ email: "", password: "", rememberMe: false });
@@ -41,6 +45,17 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const mode = params.get("mode");
+    if (mode === "signup") {
+      setTab("signup");
+    }
+    if (mode === "signin") {
+      setTab("signin");
+    }
+  }, [location.search]);
+
+  useEffect(() => {
     if (!toast.show) {
       return undefined;
     }
@@ -52,16 +67,7 @@ export default function LoginPage() {
     setToast({ show: true, kind, text });
   };
 
-  const readAccount = () => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  };
-
-  const saveAccount = (account) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(account));
-  };
-
-  const handleSignup = (event) => {
+  const handleSignup = async (event) => {
     event.preventDefault();
     const { name, email, password, confirmPassword, acceptTerms } = signupForm;
 
@@ -89,20 +95,36 @@ export default function LoginPage() {
       return;
     }
 
-    saveAccount({ name: name.trim(), email: email.trim().toLowerCase(), password });
-    setSignupStatus(`Account created for ${name.trim()}. You can sign in now.`);
-    showToast("success", "Signup successful");
-    setSignupForm({ name: "", email: "", password: "", confirmPassword: "", acceptTerms: false });
+    try {
+      setSignupLoading(true);
+      const payload = await apiRequest("/auth/signup", {
+        method: "POST",
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          password
+        })
+      });
 
-    window.setTimeout(() => {
-      setTab("signin");
-      setSigninForm((prev) => ({ ...prev, email: email.trim().toLowerCase(), password: "" }));
-    }, 1200);
+      setAuthSession({ token: payload?.token, user: payload?.user });
+      setSignupStatus(`Account created for ${name.trim()}. You can sign in now.`);
+      showToast("success", "Signup successful");
+      setSignupForm({ name: "", email: "", password: "", confirmPassword: "", acceptTerms: false });
+
+      window.setTimeout(() => {
+        setTab("signin");
+        setSigninForm((prev) => ({ ...prev, email: email.trim().toLowerCase(), password: "" }));
+      }, 1200);
+    } catch (error) {
+      setSignupStatus(error.message || "Signup failed.");
+      showToast("error", "Signup unsuccessful");
+    } finally {
+      setSignupLoading(false);
+    }
   };
 
-  const handleSignin = (event) => {
+  const handleSignin = async (event) => {
     event.preventDefault();
-    const account = readAccount();
     const email = signinForm.email.trim().toLowerCase();
 
     if (!email || !signinForm.password) {
@@ -110,17 +132,22 @@ export default function LoginPage() {
       return;
     }
 
-    if (!account) {
-      setSigninStatus("No account exists yet. Switch to Sign Up first.");
-      return;
-    }
+    try {
+      setSigninLoading(true);
+      const payload = await apiRequest("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password: signinForm.password })
+      });
 
-    if (account.email !== email || account.password !== signinForm.password) {
-      setSigninStatus("Email or password is incorrect.");
-      return;
+      setAuthSession({ token: payload?.token, user: payload?.user });
+      setSigninStatus(`Signed in as ${payload?.user?.name || "User"}.`);
+      showToast("success", "Signin successful");
+    } catch (error) {
+      setSigninStatus(error.message || "Email or password is incorrect.");
+      showToast("error", "Signin unsuccessful");
+    } finally {
+      setSigninLoading(false);
     }
-
-    setSigninStatus(`Signed in as ${account.name}.`);
   };
 
   return (
@@ -208,8 +235,8 @@ export default function LoginPage() {
                 />
               </label>
 
-              <button className="w-full rounded-full bg-gradient-to-r from-sage-700 to-sage-500 px-5 py-3 text-sm font-extrabold text-white transition hover:-translate-y-0.5 hover:shadow-lg">
-                Sign In
+              <button disabled={signinLoading} className="w-full rounded-full bg-gradient-to-r from-sage-700 to-sage-500 px-5 py-3 text-sm font-extrabold text-white transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70">
+                {signinLoading ? "Signing In..." : "Sign In"}
               </button>
               <p className="min-h-5 text-sm font-bold text-sage-700">{signinStatus}</p>
             </form>
@@ -270,8 +297,8 @@ export default function LoginPage() {
                 I agree to the terms
               </label>
 
-              <button className="w-full rounded-full bg-gradient-to-r from-sage-700 to-sage-500 px-5 py-3 text-sm font-extrabold text-white transition hover:-translate-y-0.5 hover:shadow-lg">
-                Create Account
+              <button disabled={signupLoading} className="w-full rounded-full bg-gradient-to-r from-sage-700 to-sage-500 px-5 py-3 text-sm font-extrabold text-white transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70">
+                {signupLoading ? "Creating Account..." : "Create Account"}
               </button>
               <p className="min-h-5 text-sm font-bold text-sage-700">{signupStatus}</p>
             </form>
