@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 import { addToCart } from "../data/cartStorage";
+import { getAuthToken } from "../data/authStorage";
 import { getWishlistItems, removeWishlistItem } from "../data/wishlistStorage";
 
 const formatInr = (amount) =>
@@ -31,6 +32,11 @@ export default function WishlistPage() {
   };
 
   const handleMoveToCart = (item) => {
+    if (!getAuthToken()) {
+      addToCart(item, 1);
+      return;
+    }
+
     addToCart(
       {
         id: item.id,

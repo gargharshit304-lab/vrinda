@@ -5,10 +5,35 @@ export const notFound = (req, _res, next) => {
 };
 
 export const errorHandler = (err, _req, res, _next) => {
-  const statusCode = err.statusCode || 500;
+  const isPayloadTooLarge = err?.type === "entity.too.large" || err?.status === 413;
+  const isMulterLimit = err?.code === "LIMIT_FILE_SIZE";
+  const isDbConnectionIssue =
+    err?.name === "MongooseServerSelectionError" ||
+    err?.name === "MongoNetworkError" ||
+    String(err?.message || "").includes("ECONNREFUSED");
+
+  const statusCode = err.statusCode || (isPayloadTooLarge || isMulterLimit ? 413 : isDbConnectionIssue ? 503 : 500);
+  const message = isPayloadTooLarge
+    ? "Uploaded data is too large. Please reduce file size."
+    : isMulterLimit
+    ? "Uploaded data is too large. Please reduce file size."
+    : isDbConnectionIssue
+    ? "Database connection unavailable. Please try again in a moment."
+    : err.message || "Internal server error";
+
+  // eslint-disable-next-line no-console
+  console.error("[api/error]", {
+    statusCode,
+    message,
+    originalMessage: err?.message || "",
+    errorType: err?.type || "",
+    errorName: err?.name || "",
+    errorCode: err?.code || "",
+    stackTop: typeof err?.stack === "string" ? err.stack.split("\n").slice(0, 3).join("\n") : ""
+  });
 
   res.status(statusCode).json({
-    message: err.message || "Internal server error",
+    message,
     stack: process.env.NODE_ENV === "production" ? undefined : err.stack
   });
 };

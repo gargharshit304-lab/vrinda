@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
-import { clearCart, getCartItems, removeCartItem, updateCartItemQuantity } from "../data/cartStorage";
+import { CART_LOGIN_REQUIRED_MESSAGE, clearCart, getCartItems, removeCartItem, updateCartItemQuantity } from "../data/cartStorage";
+import { getAuthToken } from "../data/authStorage";
 
 const deliveryFee = 49;
 
@@ -14,16 +15,53 @@ const formatInr = (amount) =>
 
 export default function CartPage() {
   const [cartItems, setCartItems] = useState(() => getCartItems());
+  const [hasToken, setHasToken] = useState(() => Boolean(getAuthToken()));
 
   useEffect(() => {
-    const syncCart = () => setCartItems(getCartItems());
+    const syncCart = () => {
+      const tokenExists = Boolean(getAuthToken());
+      setHasToken(tokenExists);
+      setCartItems(tokenExists ? getCartItems() : []);
+    };
     window.addEventListener("storage", syncCart);
     window.addEventListener("vrinda-cart-changed", syncCart);
+    window.addEventListener("vrinda-auth-changed", syncCart);
     return () => {
       window.removeEventListener("storage", syncCart);
       window.removeEventListener("vrinda-cart-changed", syncCart);
+      window.removeEventListener("vrinda-auth-changed", syncCart);
     };
   }, []);
+
+  if (!hasToken) {
+    return (
+      <div className="pb-16">
+        <SiteNav />
+        <main className="mx-auto w-[min(1200px,94vw)] pt-6">
+          <section className="glass-card rounded-[28px] border border-white/70 bg-white/70 p-10 text-center shadow-soft">
+            <h2 className="font-display text-4xl text-sage-800">{CART_LOGIN_REQUIRED_MESSAGE}</h2>
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-sage-700">
+              Sign in to save items and continue your checkout securely.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                to="/login"
+                className="inline-flex rounded-full bg-sage-700 px-6 py-3 text-sm font-bold text-white transition duration-300 hover:-translate-y-0.5 hover:bg-sage-800"
+              >
+                Login
+              </Link>
+              <Link
+                to="/login?mode=signup"
+                className="inline-flex rounded-full border border-sage-200/80 bg-white px-6 py-3 text-sm font-bold text-sage-800 transition duration-300 hover:-translate-y-0.5 hover:bg-white"
+              >
+                Sign Up
+              </Link>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   const subtotal = useMemo(
     () => cartItems.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0),

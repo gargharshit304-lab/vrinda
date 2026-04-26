@@ -13,6 +13,11 @@ const productSchema = new mongoose.Schema(
       unique: true,
       trim: true
     },
+    category: {
+      type: String,
+      default: "All Products",
+      trim: true
+    },
     description: {
       type: String,
       default: ""
@@ -20,6 +25,10 @@ const productSchema = new mongoose.Schema(
     image: {
       type: String,
       default: ""
+    },
+    images: {
+      type: [String],
+      default: []
     },
     price: {
       type: Number,

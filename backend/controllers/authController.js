@@ -19,6 +19,14 @@ export const registerUser = async (req, res, next) => {
   try {
     const { name, email, password, role } = req.body;
 
+    // eslint-disable-next-line no-console
+    console.log("[auth/signup] Incoming request", {
+      hasName: Boolean(name),
+      email: email?.toLowerCase?.() || "",
+      passwordLength: typeof password === "string" ? password.length : 0,
+      role: role || "user"
+    });
+
     if (!name || !email || !password) {
       const error = new Error("name, email, and password are required");
       error.statusCode = 400;
@@ -44,12 +52,21 @@ export const registerUser = async (req, res, next) => {
 
     const token = signToken(user._id.toString(), user.role);
 
+    // eslint-disable-next-line no-console
+    console.log("[auth/signup] User registered", {
+      userId: user._id.toString(),
+      email: user.email,
+      role: user.role
+    });
+
     res.status(201).json({
       message: "User registered",
       token,
       user: user.toSafeObject()
     });
   } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error("[auth/signup] Error:", error.message);
     next(error);
   }
 };

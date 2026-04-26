@@ -97,6 +97,16 @@ export default function LoginPage() {
 
     try {
       setSignupLoading(true);
+      // eslint-disable-next-line no-console
+      console.log("[signup] Sending request", {
+        endpoint: "/api/auth/signup",
+        payload: {
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          passwordLength: password.length
+        }
+      });
+
       const payload = await apiRequest("/auth/signup", {
         method: "POST",
         body: JSON.stringify({
@@ -116,6 +126,12 @@ export default function LoginPage() {
         setSigninForm((prev) => ({ ...prev, email: email.trim().toLowerCase(), password: "" }));
       }, 1200);
     } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("[signup] Request failed", {
+        endpoint: "/api/auth/signup",
+        status: error?.status,
+        message: error?.message
+      });
       setSignupStatus(error.message || "Signup failed.");
       showToast("error", "Signup unsuccessful");
     } finally {

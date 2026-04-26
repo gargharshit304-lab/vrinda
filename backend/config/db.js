@@ -10,7 +10,7 @@ const connectDB = async () => {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error("MongoDB connection failed:", error.message);
-    process.exit(1);
+    throw error;
   }
 };
 

@@ -18,17 +18,50 @@ const readJsonSafely = async (response) => {
 export const apiRequest = async (path, options = {}) => {
   const { auth = false, headers = {}, ...rest } = options;
   const token = getAuthToken();
+  const url = `${API_BASE_URL}${path}`;
+  const isFormData = typeof FormData !== "undefined" && rest.body instanceof FormData;
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers
-    }
+  // eslint-disable-next-line no-console
+  console.log("[api/request]", {
+    method: rest.method || "GET",
+    url,
+    auth,
+    isFormData
   });
 
+  let response;
+
+  try {
+    response = await fetch(url, {
+      ...rest,
+      headers: {
+        ...(!isFormData ? { "Content-Type": "application/json" } : {}),
+        ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers
+      }
+    });
+  } catch (networkError) {
+    // eslint-disable-next-line no-console
+    console.error("[api/network-error]", {
+      method: rest.method || "GET",
+      url,
+      message: networkError?.message || "Network request failed"
+    });
+
+    const error = new Error("Unable to reach the server. Ensure backend is running and MongoDB is available.");
+    error.status = 0;
+    throw error;
+  }
+
   const data = await readJsonSafely(response);
+
+  // eslint-disable-next-line no-console
+  console.log("[api/response]", {
+    method: rest.method || "GET",
+    url,
+    status: response.status,
+    ok: response.ok
+  });
 
   if (!response.ok) {
     const message = data?.message || "Request failed";

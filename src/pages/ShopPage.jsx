@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 import { fetchProducts } from "../data/productApi";
 import { addToCart, getCartItems, removeCartItem, updateCartItemQuantity } from "../data/cartStorage";
+import { getAuthToken } from "../data/authStorage";
 import { getWishlistItems, toggleWishlistItem } from "../data/wishlistStorage";
 
 const sortOptions = [
@@ -28,6 +29,7 @@ export default function ShopPage() {
   const [allProducts, setAllProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
   const [cartItems, setCartItems] = useState(() => getCartItems());
   const [wishlistItems, setWishlistItems] = useState(() => getWishlistItems());
   const [lastChangedProductId, setLastChangedProductId] = useState("");
@@ -38,11 +40,14 @@ export default function ShopPage() {
   useEffect(() => {
     const refreshCart = () => setCartItems(getCartItems());
     const refreshWishlist = () => setWishlistItems(getWishlistItems());
+    const refreshProducts = () => setRefreshKey((current) => current + 1);
     window.addEventListener("vrinda-cart-changed", refreshCart);
     window.addEventListener("vrinda-wishlist-changed", refreshWishlist);
+    window.addEventListener("vrinda-products-changed", refreshProducts);
     return () => {
       window.removeEventListener("vrinda-cart-changed", refreshCart);
       window.removeEventListener("vrinda-wishlist-changed", refreshWishlist);
+      window.removeEventListener("vrinda-products-changed", refreshProducts);
     };
   }, []);
 
@@ -73,7 +78,7 @@ export default function ShopPage() {
     return () => {
       cancelled = true;
     };
-  }, [searchQuery]);
+  }, [searchQuery, refreshKey]);
 
   const categories = useMemo(() => {
     const values = [...new Set(allProducts.map((product) => product.category).filter(Boolean))];
@@ -164,8 +169,11 @@ export default function ShopPage() {
   const wishlistIdSet = useMemo(() => new Set(wishlistItems.map((item) => item.id)), [wishlistItems]);
 
   const handleIncrement = (product) => {
-    const currentQuantity = cartQuantityById[product.id] || 0;
-    const nextQuantity = currentQuantity + 1;
+    if (!getAuthToken()) {
+      addToCart(product, 1);
+      return;
+    }
+
     addToCart(product, 1);
     setLastChangedProductId(product.id);
     setTimeout(() => setLastChangedProductId((current) => (current === product.id ? "" : current)), 280);
@@ -249,6 +257,13 @@ export default function ShopPage() {
                 <span className="text-[0.68rem] font-bold uppercase tracking-[0.2em] text-sage-700/75">
                   Sort by
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setRefreshKey((current) => current + 1)}
+                  className="rounded-full border border-sage-200/80 bg-white/85 px-3 py-1.5 text-[0.68rem] font-bold uppercase tracking-[0.12em] text-sage-700 transition duration-300 hover:border-sage-300 hover:bg-white"
+                >
+                  Refresh
+                </button>
                 <div ref={sortDropdownRef} className="relative z-50 min-w-[190px] sm:min-w-[220px]">
                   <button
                     type="button"

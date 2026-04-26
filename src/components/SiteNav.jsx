@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { getCartItems, removeCartItem, updateCartItemQuantity } from "../data/cartStorage";
+import { CART_LOGIN_REQUIRED_MESSAGE, getCartItems, removeCartItem, updateCartItemQuantity } from "../data/cartStorage";
 import { fetchProducts } from "../data/productApi";
-import { AUTH_STORAGE_KEY, clearAuthSession } from "../data/authStorage";
+import { AUTH_STORAGE_KEY, clearAuthSession, getAuthToken } from "../data/authStorage";
+import { showToast } from "../data/toastEvents";
 
 const navLinkClass = ({ isActive }) =>
   `group relative rounded-full px-1 py-1 text-sm font-semibold tracking-[0.04em] transition-all duration-300 ease-in-out ${
@@ -230,7 +231,23 @@ export default function SiteNav() {
   };
 
   const toggleCartDropdown = () => {
+    if (!getAuthToken()) {
+      showToast(CART_LOGIN_REQUIRED_MESSAGE, "neutral");
+      navigate("/login");
+      return;
+    }
     setCartDropdownOpen((open) => !open);
+  };
+
+  const handleMobileCartAccess = () => {
+    if (!getAuthToken()) {
+      showToast(CART_LOGIN_REQUIRED_MESSAGE, "neutral");
+      navigate("/login");
+      setMobileOpen(false);
+      return;
+    }
+    setMobileOpen(false);
+    navigate("/cart");
   };
 
   const cartTotal = useMemo(
@@ -557,12 +574,17 @@ export default function SiteNav() {
           <MobileLink to="/shop" onClick={() => setMobileOpen(false)}>
             Shop
           </MobileLink>
-          <MobileLink to="/cart" onClick={() => setMobileOpen(false)} ariaLabel="Cart">
+          <button
+            type="button"
+            onClick={handleMobileCartAccess}
+            aria-label="Cart"
+            className="rounded-2xl border border-sage-200/80 bg-white/75 px-4 py-3 text-left text-sm font-semibold tracking-[0.03em] text-sage-800 transition duration-300 ease-in-out hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
+          >
             <span className="inline-flex items-center gap-2">
               <CartIcon />
               <span>Cart</span>
             </span>
-          </MobileLink>
+          </button>
           <MobileLink to="/about" onClick={() => setMobileOpen(false)}>
             About
           </MobileLink>

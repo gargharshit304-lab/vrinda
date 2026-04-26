@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 import { getOrders } from "../data/orderStorage";
+import { clearAuthSession } from "../data/authStorage";
 
 const AUTH_STORAGE_KEY = "vrinda.currentUser";
 const VALID_TABS = ["profile", "orders", "wishlist", "addresses", "settings"];
@@ -141,8 +142,7 @@ export default function ProfilePage() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-    window.dispatchEvent(new Event("vrinda-auth-changed"));
+    clearAuthSession();
     navigate("/");
   };
 

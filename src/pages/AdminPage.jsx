@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ADMIN_PRODUCTS_KEY, makeProductId, normalizeCatalogProduct } from "../data/productCatalog";
+import { apiRequest } from "../data/apiClient";
 
 const AUTH_STORAGE_KEY = "vrinda.currentUser";
 
@@ -8,6 +9,7 @@ const STORAGE_KEYS = {
   products: ADMIN_PRODUCTS_KEY,
   orders: "vrinda.admin.orders"
 };
+const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
 
 const sections = [
   { key: "overview", label: "Overview", icon: "M3 12l9-8 9 8M5 10v10h14V10" },
@@ -25,15 +27,26 @@ const formatInr = (amount) =>
   }).format(amount);
 
 const readStore = (key) => {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
   try {
     const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
 };
 
-const normalizeProduct = (product) => normalizeCatalogProduct(product);
+const normalizeProduct = (product) => {
+  try {
+    return normalizeCatalogProduct(product);
+  } catch {
+    return null;
+  }
+};
 
 const getEffectivePrice = (product) => {
   const basePrice = Number(product.price) || 0;
@@ -44,17 +57,34 @@ const getEffectivePrice = (product) => {
   return Math.max(1, Math.round(basePrice * (1 - salePercent / 100)));
 };
 
+const makeSlug = (value) =>
+  String(value || "product")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || `product-${Date.now()}`;
+
 export default function AdminPage() {
   const navigate = useNavigate();
   const [hasAccess, setHasAccess] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [activeSection, setActiveSection] = useState("overview");
-  const [products, setProducts] = useState(() => readStore(STORAGE_KEYS.products).map(normalizeProduct));
-  const [orders, setOrders] = useState(() => readStore(STORAGE_KEYS.orders));
+  const [products, setProducts] = useState(() =>
+    readStore(STORAGE_KEYS.products)
+      .map(normalizeProduct)
+      .filter(Boolean)
+  );
+  const [orders, setOrders] = useState(() =>
+    readStore(STORAGE_KEYS.orders).filter((order) => order && order.id)
+  );
   const [productStatus, setProductStatus] = useState("");
   const [orderStatusMsg, setOrderStatusMsg] = useState("");
   const [preview, setPreview] = useState({ src: "", text: "No image selected." });
   const [additionalPreviews, setAdditionalPreviews] = useState([]);
+  const [mainImageFile, setMainImageFile] = useState(null);
+  const [additionalImageFiles, setAdditionalImageFiles] = useState([]);
+  const [isUploadingProduct, setIsUploadingProduct] = useState(false);
   const [featureInput, setFeatureInput] = useState("");
 
   useEffect(() => {
@@ -108,10 +138,6 @@ export default function AdminPage() {
     quantity: 1,
     status: "pending"
   });
-
-  if (!authChecked || !hasAccess) {
-    return null;
-  }
 
   const persist = (nextProducts, nextOrders) => {
     localStorage.setItem(STORAGE_KEYS.products, JSON.stringify(nextProducts));
@@ -183,7 +209,7 @@ export default function AdminPage() {
 
   const pendingOrders = orders.filter((order) => order.status === "pending").length;
 
-  const addProduct = (event) => {
+  const addProduct = async (event) => {
     event.preventDefault();
     const name = productForm.name.trim();
     const category = productForm.category.trim();
@@ -216,7 +242,7 @@ export default function AdminPage() {
       setProductStatus("Enter a sale discount above 0 when sale is enabled.");
       return;
     }
-    if (!productForm.mainImageDataUrl) {
+    if (!mainImageFile) {
       setProductStatus("Upload an image from your device before saving.");
       return;
     }
@@ -233,11 +259,40 @@ export default function AdminPage() {
       return;
     }
 
-    const images = [productForm.mainImageDataUrl, ...productForm.additionalImageDataUrls].filter(Boolean);
+    const slugBase = makeSlug(name);
+    const productPayload = new FormData();
+    productPayload.append("name", name);
+    productPayload.append("slug", `${slugBase}-${Date.now().toString(36)}`);
+    productPayload.append("price", String(price));
+    productPayload.append("stock", String(unitsAvailable));
+    productPayload.append("description", description);
+    productPayload.append("image", mainImageFile);
+    additionalImageFiles.forEach((file) => {
+      productPayload.append("images", file);
+    });
+
+    let createdProduct;
+
+    try {
+      setIsUploadingProduct(true);
+      createdProduct = await apiRequest("/products", {
+        method: "POST",
+        auth: true,
+        body: productPayload
+      });
+    } catch (error) {
+      setProductStatus(error.message || "Failed to save product to backend.");
+      return;
+    } finally {
+      setIsUploadingProduct(false);
+    }
+
+    const createdImages = Array.isArray(createdProduct?.images) ? createdProduct.images.filter(Boolean) : [];
+    const createdMainImage = createdProduct?.image || createdImages[0] || "";
 
     const nextProducts = [
       {
-        id: makeProductId(name),
+        id: createdProduct?._id || makeProductId(name),
         name,
         category,
         tagline,
@@ -254,16 +309,16 @@ export default function AdminPage() {
         type,
         weightVolume,
         skinConcern,
-        mainImageDataUrl: productForm.mainImageDataUrl,
-        additionalImageDataUrls: productForm.additionalImageDataUrls,
-        imageDataUrl: productForm.mainImageDataUrl,
-        images
+        mainImageDataUrl: createdMainImage,
+        additionalImageDataUrls: createdImages.slice(1),
+        imageDataUrl: createdMainImage,
+        images: createdImages.length ? createdImages : [createdMainImage].filter(Boolean)
       },
       ...products
     ];
 
     persist(nextProducts, orders);
-    setProductStatus("Product saved successfully.");
+    setProductStatus("Product saved successfully and synced to shop.");
     setProductForm({
       name: "",
       category: "Soaps",
@@ -283,6 +338,8 @@ export default function AdminPage() {
       skinConcern: "",
       rating: ""
     });
+    setMainImageFile(null);
+    setAdditionalImageFiles([]);
     setPreview({ src: "", text: "No image selected." });
     setAdditionalPreviews([]);
     setFeatureInput("");
@@ -369,6 +426,7 @@ export default function AdminPage() {
     const file = event.target.files?.[0];
     if (!file) {
       setPreview({ src: "", text: "No image selected." });
+      setMainImageFile(null);
       setProductForm((old) => ({ ...old, mainImageDataUrl: "" }));
       return;
     }
@@ -376,21 +434,28 @@ export default function AdminPage() {
       setProductStatus("Invalid file type. Choose an image from your device.");
       return;
     }
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      const input = event.target;
+      input.value = "";
+      setPreview({ src: "", text: "No image selected." });
+      setMainImageFile(null);
+      setProductForm((old) => ({ ...old, mainImageDataUrl: "" }));
+      setProductStatus("Image size should be less than 2MB");
+      window.alert("Image size should be less than 2MB");
+      return;
+    }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const src = String(reader.result || "");
-      setPreview({ src, text: file.name });
-      setProductForm((old) => ({ ...old, mainImageDataUrl: src }));
-      setProductStatus("Image ready. Submit the form to save product.");
-    };
-    reader.onerror = () => setProductStatus("Failed to read image file.");
-    reader.readAsDataURL(file);
+    const src = URL.createObjectURL(file);
+    setMainImageFile(file);
+    setPreview({ src, text: file.name });
+    setProductForm((old) => ({ ...old, mainImageDataUrl: src }));
+    setProductStatus("Image ready. Submit the form to save product.");
   };
 
   const handleAdditionalImages = (event) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) {
+      setAdditionalImageFiles([]);
       setProductForm((old) => ({ ...old, additionalImageDataUrls: [] }));
       setAdditionalPreviews([]);
       return;
@@ -399,23 +464,21 @@ export default function AdminPage() {
       setProductStatus("Additional images must be valid image files.");
       return;
     }
+    if (files.some((file) => file.size > MAX_IMAGE_SIZE_BYTES)) {
+      const input = event.target;
+      input.value = "";
+      setAdditionalImageFiles([]);
+      setProductForm((old) => ({ ...old, additionalImageDataUrls: [] }));
+      setAdditionalPreviews([]);
+      setProductStatus("Image size should be less than 2MB");
+      window.alert("Image size should be less than 2MB");
+      return;
+    }
 
-    Promise.all(
-      files.map(
-        (file) =>
-          new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve({ name: file.name, src: String(reader.result || "") });
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          })
-      )
-    )
-      .then((entries) => {
-        setAdditionalPreviews(entries);
-        setProductForm((old) => ({ ...old, additionalImageDataUrls: entries.map((entry) => entry.src) }));
-      })
-      .catch(() => setProductStatus("Could not process additional images."));
+    const entries = files.map((file) => ({ name: file.name, src: URL.createObjectURL(file) }));
+    setAdditionalImageFiles(files);
+    setAdditionalPreviews(entries);
+    setProductForm((old) => ({ ...old, additionalImageDataUrls: entries.map((entry) => entry.src) }));
   };
 
   const addFeaturePoint = () => {
@@ -431,8 +494,49 @@ export default function AdminPage() {
     setProductForm((old) => ({ ...old, features: old.features.filter((_, idx) => idx !== index) }));
   };
 
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        <p className="text-sm font-semibold text-sage-700">Checking admin access...</p>
+      </div>
+    );
+  }
+
+  if (!hasAccess) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen">
+      <header className="mx-auto w-[min(1200px,94vw)] pt-4">
+        <div className="glass-card flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/70 px-4 py-3 shadow-soft">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 rounded-full border border-sage-200/80 bg-white/85 px-4 py-2 text-sm font-bold text-sage-800 transition duration-300 hover:-translate-y-0.5 hover:bg-white"
+          >
+            <span aria-hidden="true">&larr;</span>
+            <span>Back to Website</span>
+          </Link>
+
+          <div className="flex items-center gap-2">
+            <Link
+              to="/shop"
+              className="rounded-full border border-sage-200/80 bg-white/85 px-4 py-2 text-sm font-bold text-sage-800 transition duration-300 hover:-translate-y-0.5 hover:bg-white"
+            >
+              View Shop
+            </Link>
+            <a
+              href="/shop"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full border border-sage-200/80 bg-white/85 px-4 py-2 text-sm font-bold text-sage-800 transition duration-300 hover:-translate-y-0.5 hover:bg-white"
+            >
+              View Shop (New Tab)
+            </a>
+          </div>
+        </div>
+      </header>
+
       <div className="grid min-h-screen lg:grid-cols-[280px_1fr]">
         <aside className="relative border-b border-sage-200 bg-gradient-to-b from-[#fcfaf5] to-[#ede5d8] p-4 lg:border-b-0 lg:border-r">
           <div className="mb-3 pl-2">
@@ -724,7 +828,12 @@ export default function AdminPage() {
                   </section>
 
                   <div className="flex flex-wrap gap-2">
-                    <button className="rounded-full bg-sage-700 px-4 py-2 text-xs font-extrabold text-white">Save Product</button>
+                    <button
+                      disabled={isUploadingProduct}
+                      className="rounded-full bg-sage-700 px-4 py-2 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {isUploadingProduct ? "Uploading..." : "Save Product"}
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -747,6 +856,8 @@ export default function AdminPage() {
                           skinConcern: "",
                           rating: ""
                         });
+                        setMainImageFile(null);
+                        setAdditionalImageFiles([]);
                         setPreview({ src: "", text: "No image selected." });
                         setAdditionalPreviews([]);
                         setFeatureInput("");

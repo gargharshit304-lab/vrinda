@@ -1,6 +1,7 @@
 import { showToast } from "./toastEvents";
+import { getAuthToken } from "./authStorage";
 
-const CART_STORAGE_KEY = "vrinda.cart.items";
+export const CART_LOGIN_REQUIRED_MESSAGE = "Please login to view your cart";
 
 const readJson = (value, fallback) => {
   try {
@@ -10,13 +11,31 @@ const readJson = (value, fallback) => {
   }
 };
 
-export const getCartStorageKey = () => CART_STORAGE_KEY;
+export const getCartKey = () => {
+  if (typeof window === "undefined") {
+    return null;
+  }
 
-export const getCartItems = () => {
+  try {
+    const user = JSON.parse(window.localStorage.getItem("user"));
+    const userId = user?._id || user?.id;
+    return userId ? `cart_${userId}` : null;
+  } catch {
+    return null;
+  }
+};
+
+export const getCart = () => {
   if (typeof window === "undefined") {
     return [];
   }
-  const raw = window.localStorage.getItem(CART_STORAGE_KEY);
+
+  const cartKey = getCartKey();
+  if (!getAuthToken() || !cartKey) {
+    return [];
+  }
+
+  const raw = window.localStorage.getItem(cartKey);
   const parsed = readJson(raw, []);
   return Array.isArray(parsed)
     ? parsed
@@ -33,12 +52,18 @@ export const getCartItems = () => {
     : [];
 };
 
-export const setCartItems = (items) => {
+export const saveCart = (items) => {
   if (typeof window === "undefined") {
     return [];
   }
+
+  const cartKey = getCartKey();
+  if (!getAuthToken() || !cartKey) {
+    return [];
+  }
+
   const nextItems = Array.isArray(items) ? items : [];
-  window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(nextItems));
+  window.localStorage.setItem(cartKey, JSON.stringify(nextItems));
   window.dispatchEvent(new Event("vrinda-cart-changed"));
   return nextItems;
 };
@@ -49,7 +74,13 @@ export const addToCart = (product, quantity = 1) => {
     return [];
   }
 
-  const currentItems = getCartItems();
+  const cartKey = getCartKey();
+  if (!getAuthToken() || !cartKey) {
+    showToast(CART_LOGIN_REQUIRED_MESSAGE, "neutral");
+    return [];
+  }
+
+  const currentItems = getCart();
   const nextQuantity = Math.max(1, Number(quantity) || 1);
   const existingIndex = currentItems.findIndex((item) => (item.productId || item.id) === productId);
   const basePrice = Number(product.price) || 0;
@@ -73,12 +104,12 @@ export const addToCart = (product, quantity = 1) => {
       ...cartItem,
       quantity: existingItem.quantity + nextQuantity
     };
-    const nextItems = setCartItems(currentItems);
+    const nextItems = saveCart(currentItems);
     showToast("Item added to cart", "success");
     return nextItems;
   }
 
-  const nextItems = setCartItems([...currentItems, cartItem]);
+  const nextItems = saveCart([...currentItems, cartItem]);
   showToast("Item added to cart", "success");
   return nextItems;
 };
@@ -86,18 +117,23 @@ export const addToCart = (product, quantity = 1) => {
 export const updateCartItemQuantity = (productId, quantity) => {
   const nextQuantity = Math.max(1, Number(quantity) || 1);
   const normalizedId = String(productId || "");
-  const nextItems = getCartItems().map((item) =>
+  const nextItems = getCart().map((item) =>
     (item.productId || item.id) === normalizedId ? { ...item, quantity: nextQuantity } : item
   );
-  return setCartItems(nextItems);
+  return saveCart(nextItems);
 };
 
-export const removeCartItem = (productId) => {
+export const removeFromCart = (productId) => {
   const normalizedId = String(productId || "");
-  const nextItems = getCartItems().filter((item) => (item.productId || item.id) !== normalizedId);
-  const result = setCartItems(nextItems);
+  const nextItems = getCart().filter((item) => (item.productId || item.id) !== normalizedId);
+  const result = saveCart(nextItems);
   showToast("Item removed", "neutral");
   return result;
 };
 
-export const clearCart = () => setCartItems([]);
+export const clearCart = () => saveCart([]);
+
+export const getCartStorageKey = () => getCartKey();
+export const getCartItems = () => getCart();
+export const setCartItems = (items) => saveCart(items);
+export const removeCartItem = (productId) => removeFromCart(productId);

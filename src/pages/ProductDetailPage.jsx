@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 import { fetchProductById, fetchProducts } from "../data/productApi";
 import { addToCart } from "../data/cartStorage";
+import { getAuthToken } from "../data/authStorage";
 
 const infoTabs = [
   { id: "ingredients", label: "Ingredients" },
@@ -132,6 +133,11 @@ export default function ProductDetailPage() {
 
   const handleAddToCart = () => {
     if (!product) {
+      return;
+    }
+
+    if (!getAuthToken()) {
+      addToCart(product, 1);
       return;
     }
 
