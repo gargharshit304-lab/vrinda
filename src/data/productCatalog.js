@@ -1,4 +1,4 @@
-export const ADMIN_PRODUCTS_KEY = "vrinda.admin.products";
+export const ADMIN_PRODUCTS_KEY = "products";
 
 export const defaultProducts = [
   {
@@ -211,12 +211,7 @@ const readAdminProductsRaw = () => {
 export const readAdminProducts = () => readAdminProductsRaw().map(normalizeCatalogProduct);
 
 export const getAllCatalogProducts = () => {
-  const adminProducts = readAdminProducts();
-  const byId = new Map(defaultProducts.map((product) => [product.id, normalizeCatalogProduct(product)]));
-  adminProducts.forEach((product) => {
-    byId.set(product.id, normalizeCatalogProduct(product));
-  });
-  return [...byId.values()];
+  return readAdminProducts();
 };
 
 export const getCatalogProductById = (productId) => {

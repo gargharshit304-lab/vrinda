@@ -37,6 +37,24 @@
     @apply rounded-2xl border border-white/55 bg-white/55 shadow-soft backdrop-blur-xl;
   }
 
+  .status-pending,
+  .status-processing {
+    @apply border border-amber-300 bg-amber-100 text-amber-700;
+  }
+
+  .status-packed {
+    @apply border border-sky-300 bg-sky-100 text-sky-700;
+  }
+
+  .status-out-for-delivery,
+  .status-shipped {
+    @apply border border-orange-300 bg-orange-100 text-orange-700;
+  }
+
+  .status-delivered {
+    @apply border border-emerald-300 bg-emerald-100 text-emerald-700;
+  }
+
   .pill-btn {
     @apply rounded-full border border-sage-200/70 bg-white/85 px-5 py-2.5 text-sm font-bold text-sage-800 transition duration-300 ease-in-out hover:-translate-y-0.5 hover:shadow-md;
   }

@@ -11,3 +11,19 @@ export const createOrderRequest = async ({ items, shippingAddress, paymentMethod
     })
   });
 };
+
+export const fetchOrders = async () => {
+  const data = await apiRequest("/orders", {
+    auth: true
+  });
+
+  return Array.isArray(data) ? data : [];
+};
+
+export const fetchMyOrders = async () => {
+  const data = await apiRequest("/orders/my", {
+    auth: true
+  });
+
+  return Array.isArray(data) ? data : [];
+};

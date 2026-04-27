@@ -40,6 +40,14 @@ const ratingLabelMap = {
   5: "Excellent"
 };
 
+const isAdminAccount = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user"))?.role === "admin";
+  } catch {
+    return false;
+  }
+};
+
 export default function ProductDetailPage() {
   const navigate = useNavigate();
   const { productId } = useParams();
@@ -54,6 +62,7 @@ export default function ProductDetailPage() {
   const [reviewForm, setReviewForm] = useState({ name: "", rating: "5", comment: "" });
   const [hoverRating, setHoverRating] = useState(0);
   const [clickedRating, setClickedRating] = useState(0);
+  const isAdminUser = isAdminAccount();
 
   useEffect(() => {
     let cancelled = false;
@@ -132,6 +141,10 @@ export default function ProductDetailPage() {
   }, [allProducts, product]);
 
   const handleAddToCart = () => {
+    if (isAdminUser) {
+      return;
+    }
+
     if (!product) {
       return;
     }
@@ -288,17 +301,25 @@ export default function ProductDetailPage() {
                 ))}
               </ul>
 
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={handleAddToCart}
-                  className="rounded-full bg-gradient-to-r from-sage-800 to-sage-600 px-5 py-3 text-sm font-extrabold tracking-[0.04em] text-white shadow-[0_12px_24px_rgba(31,61,43,0.28)] transition duration-300 ease-in-out hover:-translate-y-0.5 hover:scale-[1.01] hover:shadow-[0_16px_30px_rgba(31,61,43,0.34)]"
-                >
-                  Add to Cart
-                </button>
-                <button className="rounded-full border border-sage-300 bg-white/85 px-5 py-3 text-sm font-extrabold tracking-[0.04em] text-sage-800 transition duration-300 ease-in-out hover:-translate-y-0.5 hover:border-sage-500 hover:bg-white">
-                  Buy Now
-                </button>
+              <div className="mt-6 space-y-3">
+                {isAdminUser ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                    Admin accounts cannot purchase products
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={handleAddToCart}
+                      className="rounded-full bg-gradient-to-r from-sage-800 to-sage-600 px-5 py-3 text-sm font-extrabold tracking-[0.04em] text-white shadow-[0_12px_24px_rgba(31,61,43,0.28)] transition duration-300 ease-in-out hover:-translate-y-0.5 hover:scale-[1.01] hover:shadow-[0_16px_30px_rgba(31,61,43,0.34)]"
+                    >
+                      Add to Cart
+                    </button>
+                    <button className="rounded-full border border-sage-300 bg-white/85 px-5 py-3 text-sm font-extrabold tracking-[0.04em] text-sage-800 transition duration-300 ease-in-out hover:-translate-y-0.5 hover:border-sage-500 hover:bg-white">
+                      Buy Now
+                    </button>
+                  </div>
+                )}
               </div>
             </section>
 

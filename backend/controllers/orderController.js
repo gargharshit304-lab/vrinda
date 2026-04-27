@@ -9,6 +9,13 @@ export const createOrder = async (req, res, next) => {
   const session = await mongoose.startSession();
 
   try {
+    if (req.user?.role === "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Admins are not allowed to place orders"
+      });
+    }
+
     const { items, shippingAddress, paymentMethod = "COD" } = req.body;
 
     if (!Array.isArray(items) || !items.length) {
@@ -99,7 +106,10 @@ export const createOrder = async (req, res, next) => {
 
 export const getOrders = async (_req, res, next) => {
   try {
-    const orders = await Order.find({}).sort({ createdAt: -1 });
+    const orders = await Order.find({})
+      .populate("user", "name email role")
+      .populate("items.product", "name image price")
+      .sort({ createdAt: -1 });
     res.status(200).json(orders);
   } catch (error) {
     next(error);
@@ -108,10 +118,23 @@ export const getOrders = async (_req, res, next) => {
 
 export const getOrderById = async (req, res, next) => {
   try {
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id)
+      .populate("user", "name email role")
+      .populate("items.product", "name image price");
     if (!order) {
       const error = new Error("Order not found");
       error.statusCode = 404;
+export const getMyOrders = async (req, res, next) => {
+  try {
+    const orders = await Order.find({ user: req.user._id })
+      .populate("items.product", "name image price")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(orders);
+  } catch (error) {
+    next(error);
+  }
+};
       throw error;
     }
 
@@ -141,10 +164,31 @@ export const updateOrderStatus = async (req, res, next) => {
       throw error;
     }
 
-    order.orderStatus = status || order.orderStatus;
+    const normalizedStatus = String(status || order.orderStatus || "").trim().toLowerCase();
+    const statusMap = {
+      pending: "processing",
+      packed: "packed",
+      "out for delivery": "shipped",
+      delivered: "delivered",
+      processing: "processing",
+      shipped: "shipped",
+      cancelled: "cancelled"
+    };
+
+    if (!statusMap[normalizedStatus]) {
+      const error = new Error("Invalid order status");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    order.orderStatus = statusMap[normalizedStatus];
     await order.save();
 
-    res.status(200).json(order);
+    const populatedOrder = await Order.findById(order._id)
+      .populate("user", "name email role")
+      .populate("items.product", "name image price");
+
+    res.status(200).json(populatedOrder || order);
   } catch (error) {
     next(error);
   }

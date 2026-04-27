@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 import { clearCart, getCartItems } from "../data/cartStorage";
 import { addOrder } from "../data/orderStorage";
@@ -31,6 +31,14 @@ const formatInr = (amount) =>
     maximumFractionDigits: 0
   }).format(amount);
 
+const getStoredUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user"));
+  } catch {
+    return null;
+  }
+};
+
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const [cartItems, setCartItems] = useState(() => getCartItems());
@@ -38,6 +46,12 @@ export default function CheckoutPage() {
   const [errors, setErrors] = useState({});
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const user = getStoredUser();
+  const isAdminUser = user?.role === "admin";
+
+  if (isAdminUser) {
+    return <Navigate to="/admin" replace />;
+  }
 
   useEffect(() => {
     const syncCart = () => setCartItems(getCartItems());

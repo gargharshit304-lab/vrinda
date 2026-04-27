@@ -93,7 +93,7 @@ export default function OrderConfirmationPage() {
               </Link>
               <button
                 type="button"
-                onClick={() => navigate("/profile?tab=orders")}
+                onClick={() => navigate("/orders")}
                 className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-sage-800 to-sage-600 px-5 py-3 text-sm font-extrabold text-white shadow-[0_12px_24px_rgba(31,61,43,0.24)] transition duration-300 hover:-translate-y-0.5"
               >
                 View Orders

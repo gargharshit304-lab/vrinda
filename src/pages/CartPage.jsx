@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 import { CART_LOGIN_REQUIRED_MESSAGE, clearCart, getCartItems, removeCartItem, updateCartItemQuantity } from "../data/cartStorage";
 import { getAuthToken } from "../data/authStorage";
@@ -13,9 +13,23 @@ const formatInr = (amount) =>
     maximumFractionDigits: 0
   }).format(amount);
 
+const getStoredUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user"));
+  } catch {
+    return null;
+  }
+};
+
 export default function CartPage() {
   const [cartItems, setCartItems] = useState(() => getCartItems());
   const [hasToken, setHasToken] = useState(() => Boolean(getAuthToken()));
+  const user = getStoredUser();
+  const isAdminUser = user?.role === "admin";
+
+  if (isAdminUser) {
+    return <Navigate to="/admin" replace />;
+  }
 
   useEffect(() => {
     const syncCart = () => {

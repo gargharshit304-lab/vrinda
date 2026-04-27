@@ -162,7 +162,7 @@ export default function ProfilePage() {
 
             <div className="mt-4 hidden space-y-1.5 lg:block">
               <SidebarButton label="My Profile" active={activeTab === "profile"} onClick={() => openTab("profile")} />
-              <SidebarButton label="My Orders" active={activeTab === "orders"} onClick={() => openTab("orders")} />
+              <SidebarButton label="My Orders" active={activeTab === "orders"} onClick={() => navigate("/orders")} />
               <SidebarButton label="Wishlist" active={activeTab === "wishlist"} onClick={() => openTab("wishlist")} />
               <SidebarButton label="Addresses" active={activeTab === "addresses"} onClick={() => openTab("addresses")} />
               <SidebarButton label="Settings" active={activeTab === "settings"} onClick={() => openTab("settings")} />
@@ -180,7 +180,7 @@ export default function ProfilePage() {
             <div className="glass-card rounded-2xl border border-white/70 bg-white/65 p-2 lg:hidden">
               <div className="flex gap-2 overflow-x-auto pb-1">
                 <MobileTab label="Profile" active={activeTab === "profile"} onClick={() => openTab("profile")} />
-                <MobileTab label="Orders" active={activeTab === "orders"} onClick={() => openTab("orders")} />
+                <MobileTab label="Orders" active={activeTab === "orders"} onClick={() => navigate("/orders")} />
                 <MobileTab label="Wishlist" active={activeTab === "wishlist"} onClick={() => openTab("wishlist")} />
                 <MobileTab label="Addresses" active={activeTab === "addresses"} onClick={() => openTab("addresses")} />
                 <MobileTab label="Settings" active={activeTab === "settings"} onClick={() => openTab("settings")} />

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 import { fetchProducts as fetchProductsApi } from "../data/productApi";
+import { ADMIN_PRODUCTS_KEY } from "../data/productCatalog";
 import { addToCart, getCartItems, removeCartItem, updateCartItemQuantity } from "../data/cartStorage";
 import { getAuthToken } from "../data/authStorage";
 import { getWishlistItems, toggleWishlistItem } from "../data/wishlistStorage";
@@ -23,6 +24,14 @@ const getEffectivePrice = (product) => {
 
 const formatInr = (amount) => `Rs ${Math.round(amount)}`;
 
+const isAdminAccount = () => {
+  try {
+    return JSON.parse(localStorage.getItem("user"))?.role === "admin";
+  } catch {
+    return false;
+  }
+};
+
 export default function ShopPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,6 +45,7 @@ export default function ShopPage() {
   const [lastHeartProductId, setLastHeartProductId] = useState("");
   const [quickViewProduct, setQuickViewProduct] = useState(null);
   const initialLoadDoneRef = useRef(false);
+  const isAdminUser = isAdminAccount();
   const searchQuery = useMemo(() => new URLSearchParams(location.search).get("q")?.trim() || "", [location.search]);
 
   const loadLatestProducts = async (query) => {
@@ -56,13 +66,20 @@ export default function ShopPage() {
     const refreshCart = () => setCartItems(getCartItems());
     const refreshWishlist = () => setWishlistItems(getWishlistItems());
     const refreshProducts = () => setRefreshKey((current) => current + 1);
+    const handleStorage = (event) => {
+      if (!event.key || event.key === ADMIN_PRODUCTS_KEY) {
+        refreshProducts();
+      }
+    };
     window.addEventListener("vrinda-cart-changed", refreshCart);
     window.addEventListener("vrinda-wishlist-changed", refreshWishlist);
     window.addEventListener("vrinda-products-changed", refreshProducts);
+    window.addEventListener("storage", handleStorage);
     return () => {
       window.removeEventListener("vrinda-cart-changed", refreshCart);
       window.removeEventListener("vrinda-wishlist-changed", refreshWishlist);
       window.removeEventListener("vrinda-products-changed", refreshProducts);
+      window.removeEventListener("storage", handleStorage);
     };
   }, []);
 
@@ -171,6 +188,10 @@ export default function ShopPage() {
   const wishlistIdSet = useMemo(() => new Set(wishlistItems.map((item) => item.id)), [wishlistItems]);
 
   const handleIncrement = (product) => {
+    if (isAdminUser) {
+      return;
+    }
+
     if (!getAuthToken()) {
       addToCart(product, 1);
       return;
@@ -183,6 +204,10 @@ export default function ShopPage() {
   };
 
   const handleDecrement = (product) => {
+    if (isAdminUser) {
+      return;
+    }
+
     const currentQuantity = cartQuantityById[product.id] || 0;
     if (currentQuantity <= 1) {
       removeCartItem(product.id);
@@ -423,9 +448,11 @@ export default function ShopPage() {
                         <p className="text-[0.66rem] font-bold uppercase tracking-[0.22em] text-sage-700/75">{product.category}</p>
                         <h2 className="text-lg font-extrabold text-sage-800">{product.name}</h2>
                         <p className="text-sm text-sage-600">{product.tagline || product.copy}</p>
-                        <div className="flex items-center justify-between pt-1">
+                        <div className="flex items-center justify-between gap-3 pt-1">
                           <span className="font-bold text-sage-700">{formatInr(getEffectivePrice(product))}</span>
-                          {cartQuantityById[product.id] > 0 ? (
+                          {isAdminUser ? (
+                            <span className="text-right text-xs font-semibold text-sage-700">Admin accounts cannot purchase products</span>
+                          ) : cartQuantityById[product.id] > 0 ? (
                             <div className={`inline-flex items-center rounded-full border border-sage-200/80 bg-[#f8f5ee] p-1 shadow-sm ${lastChangedProductId === product.id ? "cart-stepper-pop" : ""}`}>
                               <button
                                 type="button"
@@ -533,15 +560,21 @@ export default function ShopPage() {
                 </div>
 
                 <div className="mt-6 grid gap-3 sm:mt-8">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleIncrement(quickViewProduct);
-                    }}
-                    className="rounded-full bg-gradient-to-r from-sage-800 to-sage-600 px-5 py-3 text-sm font-extrabold tracking-[0.05em] text-white shadow-[0_14px_24px_rgba(31,61,43,0.24)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_30px_rgba(31,61,43,0.3)]"
-                  >
-                    Add to Cart
-                  </button>
+                  {isAdminUser ? (
+                    <div className="rounded-full border border-amber-200 bg-amber-50 px-5 py-3 text-center text-sm font-semibold text-amber-800">
+                      Admin accounts cannot purchase products
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleIncrement(quickViewProduct);
+                      }}
+                      className="rounded-full bg-gradient-to-r from-sage-800 to-sage-600 px-5 py-3 text-sm font-extrabold tracking-[0.05em] text-white shadow-[0_14px_24px_rgba(31,61,43,0.24)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_18px_30px_rgba(31,61,43,0.3)]"
+                    >
+                      Add to Cart
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {

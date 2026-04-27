@@ -11,6 +11,7 @@ import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import WishlistPage from "./pages/WishlistPage";
 import OrderConfirmationPage from "./pages/OrderConfirmationPage";
+import MyOrders from "./pages/MyOrders";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { getToastEventName } from "./data/toastEvents";
 
@@ -70,7 +71,7 @@ export default function App() {
           path="/orders"
           element={
             <ProtectedRoute>
-              <Navigate to="/profile?tab=orders" replace />
+              <MyOrders />
             </ProtectedRoute>
           }
         />

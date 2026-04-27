@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { CART_LOGIN_REQUIRED_MESSAGE, getCartItems, removeCartItem, updateCartItemQuantity } from "../data/cartStorage";
 import { fetchProducts } from "../data/productApi";
-import { AUTH_STORAGE_KEY, clearAuthSession, getAuthToken } from "../data/authStorage";
+import { AUTH_STORAGE_KEY, USER_STORAGE_KEY, clearAuthSession, getAuthToken } from "../data/authStorage";
 import { showToast } from "../data/toastEvents";
 
 const navLinkClass = ({ isActive }) =>
@@ -95,12 +95,16 @@ export default function SiteNav() {
 
   useEffect(() => {
     const readUser = () => {
-      const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-      setCurrentUser(raw ? JSON.parse(raw) : null);
+      try {
+        const raw = localStorage.getItem(USER_STORAGE_KEY);
+        setCurrentUser(raw ? JSON.parse(raw) : null);
+      } catch {
+        setCurrentUser(null);
+      }
     };
 
     const handleStorage = (event) => {
-      if (!event.key || event.key === AUTH_STORAGE_KEY) {
+      if (!event.key || event.key === USER_STORAGE_KEY || event.key === AUTH_STORAGE_KEY) {
         readUser();
       }
     };
@@ -394,20 +398,22 @@ export default function SiteNav() {
           ) : (
             <div ref={profileRef} className="relative">
               <div className="flex items-center gap-1.5">
-                <div data-cart-dropdown-root className="relative">
-                  <CartLink count={cartCount} pulse={cartPulse} onClick={toggleCartDropdown} />
-                  {cartDropdownOpen ? (
-                    <div className="absolute right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] max-w-none sm:w-[350px] sm:max-w-[350px]">
-                      <CartDropdown
-                        cartItems={cartItems}
-                        cartTotal={cartTotal}
-                        onClose={() => setCartDropdownOpen(false)}
-                        onQuantityChange={handleCartQuantityChange}
-                        onRemove={handleCartRemove}
-                      />
-                    </div>
-                  ) : null}
-                </div>
+                {!isAdminUser ? (
+                  <div data-cart-dropdown-root className="relative">
+                    <CartLink count={cartCount} pulse={cartPulse} onClick={toggleCartDropdown} />
+                    {cartDropdownOpen ? (
+                      <div className="absolute right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] max-w-none sm:w-[350px] sm:max-w-[350px]">
+                        <CartDropdown
+                          cartItems={cartItems}
+                          cartTotal={cartTotal}
+                          onClose={() => setCartDropdownOpen(false)}
+                          onQuantityChange={handleCartQuantityChange}
+                          onRemove={handleCartRemove}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <Link
                   to="/profile"
@@ -455,7 +461,7 @@ export default function SiteNav() {
                   My Profile
                 </Link>
                 <Link
-                  to="/profile?tab=orders"
+                  to="/orders"
                   onClick={() => setProfileOpen(false)}
                   className="block rounded-xl px-3 py-2 text-sm font-medium text-sage-700 transition duration-200 hover:bg-sage-700/8 hover:text-[#1f3d2b]"
                 >
@@ -500,20 +506,22 @@ export default function SiteNav() {
         </div>
 
         <div className="flex items-center gap-2 md:hidden">
-          <div data-cart-dropdown-root className="relative">
-            <CartLink count={cartCount} pulse={cartPulse} onClick={toggleCartDropdown} />
-            {cartDropdownOpen ? (
-              <div className="absolute right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] max-w-none sm:w-[350px] sm:max-w-[350px]">
-                <CartDropdown
-                  cartItems={cartItems}
-                  cartTotal={cartTotal}
-                  onClose={() => setCartDropdownOpen(false)}
-                  onQuantityChange={handleCartQuantityChange}
-                  onRemove={handleCartRemove}
-                />
-              </div>
-            ) : null}
-          </div>
+          {!isAdminUser ? (
+            <div data-cart-dropdown-root className="relative">
+              <CartLink count={cartCount} pulse={cartPulse} onClick={toggleCartDropdown} />
+              {cartDropdownOpen ? (
+                <div className="absolute right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] max-w-none sm:w-[350px] sm:max-w-[350px]">
+                  <CartDropdown
+                    cartItems={cartItems}
+                    cartTotal={cartTotal}
+                    onClose={() => setCartDropdownOpen(false)}
+                    onQuantityChange={handleCartQuantityChange}
+                    onRemove={handleCartRemove}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <button
             type="button"
@@ -574,17 +582,19 @@ export default function SiteNav() {
           <MobileLink to="/shop" onClick={() => setMobileOpen(false)}>
             Shop
           </MobileLink>
-          <button
-            type="button"
-            onClick={handleMobileCartAccess}
-            aria-label="Cart"
-            className="rounded-2xl border border-sage-200/80 bg-white/75 px-4 py-3 text-left text-sm font-semibold tracking-[0.03em] text-sage-800 transition duration-300 ease-in-out hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
-          >
-            <span className="inline-flex items-center gap-2">
-              <CartIcon />
-              <span>Cart</span>
-            </span>
-          </button>
+          {!isAdminUser ? (
+            <button
+              type="button"
+              onClick={handleMobileCartAccess}
+              aria-label="Cart"
+              className="rounded-2xl border border-sage-200/80 bg-white/75 px-4 py-3 text-left text-sm font-semibold tracking-[0.03em] text-sage-800 transition duration-300 ease-in-out hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
+            >
+              <span className="inline-flex items-center gap-2">
+                <CartIcon />
+                <span>Cart</span>
+              </span>
+            </button>
+          ) : null}
           <MobileLink to="/about" onClick={() => setMobileOpen(false)}>
             About
           </MobileLink>
@@ -617,7 +627,7 @@ export default function SiteNav() {
                 <MobileLink to="/profile" onClick={() => setMobileOpen(false)}>
                   My Profile
                 </MobileLink>
-                <MobileLink to="/profile?tab=orders" onClick={() => setMobileOpen(false)}>
+                <MobileLink to="/orders" onClick={() => setMobileOpen(false)}>
                   Orders
                 </MobileLink>
                 <MobileLink to="/wishlist" onClick={() => setMobileOpen(false)}>

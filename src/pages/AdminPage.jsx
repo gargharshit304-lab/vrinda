@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ADMIN_PRODUCTS_KEY, makeProductId, normalizeCatalogProduct } from "../data/productCatalog";
 import { apiRequest } from "../data/apiClient";
+import { fetchOrders as fetchAdminOrders } from "../data/orderApi";
+import { deleteProduct } from "../data/productApi";
+import { showToast } from "../data/toastEvents";
 
 const AUTH_STORAGE_KEY = "vrinda.currentUser";
 
@@ -57,6 +60,86 @@ const getEffectivePrice = (product) => {
   return Math.max(1, Math.round(basePrice * (1 - salePercent / 100)));
 };
 
+const getOrderItems = (order) => (Array.isArray(order?.items) ? order.items : []);
+
+const getOrderQuantity = (order) => getOrderItems(order).reduce((sum, item) => sum + (Number(item?.quantity) || 0), 0);
+
+const getOrderAmount = (order) => Number(order?.totalPrice ?? order?.totalAmount ?? order?.subtotal ?? 0);
+
+const getOrderStatus = (order) => String(order?.status || order?.orderStatus || "pending");
+
+const isCompletedOrder = (order) => {
+  const status = getOrderStatus(order).toLowerCase();
+  return status === "completed" || status === "delivered";
+};
+
+const isPendingOrder = (order) => {
+  const status = getOrderStatus(order).toLowerCase();
+  return status === "pending" || status === "processing" || status === "packed" || status === "shipped";
+};
+
+const getOrderStatusValue = (order) => {
+  const status = getOrderStatus(order).toLowerCase();
+  if (status === "processing") {
+    return "pending";
+  }
+  if (status === "shipped") {
+    return "out for delivery";
+  }
+  if (status === "completed") {
+    return "delivered";
+  }
+  return status || "pending";
+};
+
+const getOrderStatusLabel = (order) => {
+  const status = getOrderStatusValue(order);
+  if (status === "out for delivery") {
+    return "Out for Delivery";
+  }
+  return status.charAt(0).toUpperCase() + status.slice(1);
+};
+
+const mapOrderStatusToApiValue = (status) => {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (normalized === "out for delivery") {
+    return "shipped";
+  }
+  if (normalized === "pending") {
+    return "pending";
+  }
+  if (normalized === "packed") {
+    return "packed";
+  }
+  if (normalized === "delivered") {
+    return "delivered";
+  }
+  return normalized;
+};
+
+const getOrderCustomerName = (order) => String(order?.user?.name || order?.shippingAddress?.fullName || "Customer");
+
+const getOrderItemLabel = (item) => {
+  const quantity = Number(item?.quantity) || 0;
+  const name = String(item?.name || item?.product?.name || "Item");
+  return quantity > 0 ? `${name} x ${quantity}` : name;
+};
+
+const getOrderItemKey = (order, item, index) => String(item?.product?._id || item?.product || item?.name || `${order?._id || "order"}-${index}`);
+
+const formatOrderItems = (order) => {
+  const items = getOrderItems(order);
+  if (!items.length) {
+    return "-";
+  }
+
+  return items.map((item, index) => (
+    <div key={getOrderItemKey(order, item, index)} className="text-xs font-semibold text-sage-700">
+      {getOrderItemLabel(item)}
+    </div>
+  ));
+};
+
 const makeSlug = (value) =>
   String(value || "product")
     .toLowerCase()
@@ -75,9 +158,7 @@ export default function AdminPage() {
       .map(normalizeProduct)
       .filter(Boolean)
   );
-  const [orders, setOrders] = useState(() =>
-    readStore(STORAGE_KEYS.orders).filter((order) => order && order.id)
-  );
+  const [orders, setOrders] = useState([]);
   const [productStatus, setProductStatus] = useState("");
   const [orderStatusMsg, setOrderStatusMsg] = useState("");
   const [preview, setPreview] = useState({ src: "", text: "No image selected." });
@@ -112,6 +193,19 @@ export default function AdminPage() {
     navigate("/login", { replace: true });
   }, [navigate]);
 
+  useEffect(() => {
+    const loadOrders = async () => {
+      try {
+        const data = await fetchAdminOrders();
+        setOrders(data);
+      } catch (error) {
+        setOrderStatusMsg(error?.message || "Failed to load orders from the server.");
+      }
+    };
+
+    loadOrders();
+  }, []);
+
   const [productForm, setProductForm] = useState({
     name: "",
     category: "Soaps",
@@ -132,13 +226,6 @@ export default function AdminPage() {
     rating: ""
   });
 
-  const [orderForm, setOrderForm] = useState({
-    customer: "",
-    productId: "",
-    quantity: 1,
-    status: "pending"
-  });
-
   const persist = (nextProducts, nextOrders) => {
     localStorage.setItem(STORAGE_KEYS.products, JSON.stringify(nextProducts));
     localStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(nextOrders));
@@ -150,10 +237,16 @@ export default function AdminPage() {
   const soldByProduct = useMemo(() => {
     const map = new Map();
     orders.forEach((order) => {
-      if (order.status !== "completed") {
+      if (!isCompletedOrder(order)) {
         return;
       }
-      map.set(order.productId, (map.get(order.productId) || 0) + order.quantity);
+      getOrderItems(order).forEach((item) => {
+        const productId = String(item?.product?._id || item?.product || item?.productId || "");
+        if (!productId) {
+          return;
+        }
+        map.set(productId, (map.get(productId) || 0) + (Number(item?.quantity) || 0));
+      });
     });
     return map;
   }, [orders]);
@@ -165,15 +258,11 @@ export default function AdminPage() {
     let pendingCount = 0;
 
     orders.forEach((order) => {
-      const product = products.find((item) => item.id === order.productId);
-      if (!product) {
-        return;
-      }
-      const lineValue = getEffectivePrice(product) * order.quantity;
-      if (order.status === "completed") {
+      const lineValue = getOrderAmount(order);
+      if (isCompletedOrder(order)) {
         completedRevenue += lineValue;
         completedCount += 1;
-      } else if (order.status === "pending") {
+      } else if (isPendingOrder(order)) {
         pendingPipeline += lineValue;
         pendingCount += 1;
       }
@@ -207,7 +296,7 @@ export default function AdminPage() {
     return rows.map((item) => ({ ...item, width: max > 0 ? Math.round((item.sold / max) * 100) : 0 }));
   }, [products, soldByProduct]);
 
-  const pendingOrders = orders.filter((order) => order.status === "pending").length;
+  const pendingOrders = orders.filter((order) => isPendingOrder(order)).length;
 
   const addProduct = async (event) => {
     event.preventDefault();
@@ -345,81 +434,37 @@ export default function AdminPage() {
     setFeatureInput("");
   };
 
-  const removeProduct = (id) => {
+  const removeProduct = async (id) => {
+    try {
+      await deleteProduct(id);
+    } catch (error) {
+      if (error?.status !== 404) {
+        setProductStatus(error.message || "Failed to delete product from backend.");
+        return;
+      }
+    }
+
     const nextProducts = products.filter((product) => product.id !== id);
-    const nextOrders = orders.filter((order) => order.productId !== id);
-    persist(nextProducts, nextOrders);
-    setProductStatus("Product deleted. Linked orders removed.");
-    setOrderStatusMsg("Orders updated after product deletion.");
+    persist(nextProducts, orders);
+    window.dispatchEvent(new Event("vrinda-products-changed"));
+    setProductStatus("Product deleted successfully.");
+    showToast("Product deleted successfully", "success");
   };
 
-  const addOrder = (event) => {
-    event.preventDefault();
-    const customer = orderForm.customer.trim();
-    const quantity = Number(orderForm.quantity);
-    const linkedProduct = products.find((item) => item.id === orderForm.productId);
+  const updateStatus = async (id, status) => {
+    try {
+      await apiRequest(`/orders/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        auth: true,
+        body: JSON.stringify({ status: mapOrderStatusToApiValue(status) })
+      });
 
-    if (!products.length) {
-      setOrderStatusMsg("Add at least one product before creating orders.");
-      return;
+      const data = await fetchAdminOrders();
+      setOrders(data);
+      setOrderStatusMsg("Order status updated.");
+    } catch (error) {
+      setOrderStatusMsg(error?.message || "Failed to update order status.");
     }
-    if (!customer || !orderForm.productId || !Number.isFinite(quantity) || quantity < 1) {
-      setOrderStatusMsg("Please fill all order fields correctly.");
-      return;
-    }
-    if (!linkedProduct) {
-      setOrderStatusMsg("Selected product is unavailable.");
-      return;
-    }
-    if (linkedProduct.unitsAvailable <= 0) {
-      setOrderStatusMsg("Selected product is out of stock.");
-      return;
-    }
-    if (quantity > linkedProduct.unitsAvailable) {
-      setOrderStatusMsg(`Only ${linkedProduct.unitsAvailable} unit(s) available for this product.`);
-      return;
-    }
-
-    const nextProducts = products.map((product) =>
-      product.id === linkedProduct.id ? { ...product, unitsAvailable: product.unitsAvailable - quantity } : product
-    );
-
-    const nextOrders = [
-      {
-        id: `ord_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`,
-        customer,
-        productId: orderForm.productId,
-        quantity,
-        status: orderForm.status
-      },
-      ...orders
-    ];
-
-    persist(nextProducts, nextOrders);
-    setOrderStatusMsg("Order added successfully.");
-    setOrderForm({ customer: "", productId: "", quantity: 1, status: "pending" });
-  };
-
-  const toggleOrder = (id) => {
-    const nextOrders = orders.map((order) =>
-      order.id === id ? { ...order, status: order.status === "pending" ? "completed" : "pending" } : order
-    );
-    persist(products, nextOrders);
-    setOrderStatusMsg("Order status updated.");
-  };
-
-  const deleteOrder = (id) => {
-    const deleted = orders.find((order) => order.id === id);
-    const nextOrders = orders.filter((order) => order.id !== id);
-    const nextProducts = deleted
-      ? products.map((product) =>
-          product.id === deleted.productId
-            ? { ...product, unitsAvailable: product.unitsAvailable + deleted.quantity }
-            : product
-        )
-      : products;
-    persist(nextProducts, nextOrders);
-    setOrderStatusMsg("Order deleted.");
   };
 
   const handleMainImage = (event) => {
@@ -917,65 +962,11 @@ export default function AdminPage() {
           {activeSection === "orders" && (
             <section className="glass-card p-5">
               <h3 className="font-display text-4xl font-semibold text-sage-800">Pending Orders</h3>
-              <form onSubmit={addOrder} className="mt-4 grid gap-3 md:grid-cols-2">
-                <label className="text-sm font-bold text-sage-800">
-                  Customer Name
-                  <input
-                    value={orderForm.customer}
-                    onChange={(e) => setOrderForm((old) => ({ ...old, customer: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
-                    required
-                  />
-                </label>
-                <label className="text-sm font-bold text-sage-800">
-                  Product
-                  <select
-                    value={orderForm.productId}
-                    onChange={(e) => setOrderForm((old) => ({ ...old, productId: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
-                    required
-                  >
-                    <option value="">Select product</option>
-                    {products.map((product) => {
-                      const stock = product.unitsAvailable;
-                      return (
-                        <option key={product.id} value={product.id} disabled={stock <= 0}>
-                          {product.name} ({formatInr(getEffectivePrice(product))}) - {stock} units
-                        </option>
-                      );
-                    })}
-                  </select>
-                </label>
-                <label className="text-sm font-bold text-sage-800">
-                  Quantity
-                  <input
-                    type="number"
-                    min="1"
-                    value={orderForm.quantity}
-                    onChange={(e) => setOrderForm((old) => ({ ...old, quantity: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
-                    required
-                  />
-                </label>
-                <label className="text-sm font-bold text-sage-800">
-                  Order Status
-                  <select
-                    value={orderForm.status}
-                    onChange={(e) => setOrderForm((old) => ({ ...old, status: e.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 outline-none focus:border-sage-400"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                </label>
-                <button className="md:col-span-2 w-fit rounded-full bg-sage-700 px-5 py-2 text-xs font-extrabold text-white">Add Order</button>
-                <p className="md:col-span-2 min-h-5 text-sm font-bold text-sage-700">{orderStatusMsg}</p>
-              </form>
-
               <div className="mt-3 overflow-auto rounded-xl border border-sage-200 bg-white/80">
                 <table className="min-w-[680px] w-full text-left text-sm">
                   <thead className="text-xs uppercase tracking-wider text-sage-600">
                     <tr>
+                      <th className="p-3">Order ID</th>
                       <th className="p-3">Customer</th>
                       <th className="p-3">Product</th>
                       <th className="p-3">Qty</th>
@@ -987,38 +978,81 @@ export default function AdminPage() {
                   <tbody>
                     {!orders.length ? (
                       <tr>
-                        <td className="p-3 text-sage-600" colSpan={6}>
-                          No orders added yet.
+                        <td className="p-3 text-sage-600" colSpan={7}>
+                          No orders returned by the backend yet.
                         </td>
                       </tr>
                     ) : (
                       orders.map((order) => {
-                        const product = products.find((item) => item.id === order.productId);
-                        const amount = product ? getEffectivePrice(product) * order.quantity : 0;
+                        const orderId = String(order?._id || order?.id || order?.orderNumber || "-");
+                        const items = getOrderItems(order);
+                        const quantity = getOrderQuantity(order);
+                        const amount = getOrderAmount(order);
+                        const statusValue = getOrderStatusValue(order);
+                        const statusLabel = getOrderStatusLabel(order);
+                        const isPending = statusValue === "pending";
+                        const isPacked = statusValue === "packed";
+                        const isOutForDelivery = statusValue === "out for delivery";
+                        const isDelivered = statusValue === "delivered";
+                        const badgeClass = `status-${statusValue.replace(/\s+/g, "-")}`;
                         return (
-                          <tr key={order.id} className="border-t border-sage-100">
-                            <td className="p-3">{order.customer}</td>
-                            <td className="p-3">{product ? product.name : "Product Removed"}</td>
-                            <td className="p-3">{order.quantity}</td>
+                          <tr key={orderId} className="border-t border-sage-100 align-top">
+                            <td className="p-3 text-xs font-bold text-sage-700">{orderId}</td>
+                            <td className="p-3">{getOrderCustomerName(order)}</td>
+                            <td className="p-3">
+                              {items.length ? <div className="space-y-1">{formatOrderItems(order)}</div> : "-"}
+                            </td>
+                            <td className="p-3">{quantity}</td>
                             <td className="p-3">{formatInr(amount)}</td>
                             <td className="p-3">
-                              <span
-                                className={`rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider ${
-                                  order.status === "pending"
-                                    ? "border border-amber-300 bg-amber-100 text-amber-700"
-                                    : "border border-emerald-300 bg-emerald-100 text-emerald-700"
-                                }`}
-                              >
-                                {order.status}
+                              <span className={`rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider ${badgeClass}`}>
+                                {statusLabel}
                               </span>
                             </td>
-                            <td className="p-3 space-x-2">
-                              <button onClick={() => toggleOrder(order.id)} className="rounded-full border border-sage-200 px-3 py-1 text-xs font-extrabold">
-                                Toggle
-                              </button>
-                              <button onClick={() => deleteOrder(order.id)} className="rounded-full border border-sage-200 px-3 py-1 text-xs font-extrabold">
-                                Delete
-                              </button>
+                            <td className="p-3">
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Packed")}
+                                  disabled={!isPending}
+                                  className={`rounded-full px-3 py-2 text-xs font-extrabold text-white transition ${
+                                    isPending
+                                      ? "bg-blue-600 hover:bg-blue-700"
+                                      : "cursor-not-allowed bg-gray-300 text-gray-600"
+                                  }`}
+                                >
+                                  Mark Packed
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Out for Delivery")}
+                                  disabled={!isPacked}
+                                  className={`rounded-full px-3 py-2 text-xs font-extrabold text-white transition ${
+                                    isPacked
+                                      ? "bg-orange-500 hover:bg-orange-600"
+                                      : "cursor-not-allowed bg-gray-300 text-gray-600"
+                                  }`}
+                                >
+                                  Out for Delivery
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Delivered")}
+                                  disabled={!isOutForDelivery}
+                                  className={`rounded-full px-3 py-2 text-xs font-extrabold text-white transition ${
+                                    isOutForDelivery
+                                      ? "bg-emerald-600 hover:bg-emerald-700"
+                                      : "cursor-not-allowed bg-gray-300 text-gray-600"
+                                  }`}
+                                >
+                                  Delivered
+                                </button>
+                                {isDelivered ? (
+                                  <span className="rounded-full bg-gray-200 px-3 py-2 text-xs font-extrabold text-gray-600">
+                                    All actions disabled
+                                  </span>
+                                ) : null}
+                              </div>
                             </td>
                           </tr>
                         );
