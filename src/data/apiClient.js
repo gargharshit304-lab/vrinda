@@ -19,6 +19,7 @@ export const apiRequest = async (path, options = {}) => {
   const { auth = false, headers = {}, ...rest } = options;
   const token = getAuthToken();
   const url = `${API_BASE_URL}${path}`;
+  const method = String(rest.method || "GET").toUpperCase();
   const isFormData = typeof FormData !== "undefined" && rest.body instanceof FormData;
 
   // eslint-disable-next-line no-console
@@ -34,6 +35,8 @@ export const apiRequest = async (path, options = {}) => {
   try {
     response = await fetch(url, {
       ...rest,
+      method,
+      cache: method === "GET" ? "no-store" : rest.cache,
       headers: {
         ...(!isFormData ? { "Content-Type": "application/json" } : {}),
         ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),

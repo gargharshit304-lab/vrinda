@@ -81,6 +81,8 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+orderSchema.index({ orderNumber: 1 }, { unique: true });
+
 const Order = mongoose.model("Order", orderSchema);
 
 export default Order;

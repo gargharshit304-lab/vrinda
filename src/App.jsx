@@ -11,6 +11,7 @@ import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import WishlistPage from "./pages/WishlistPage";
 import OrderConfirmationPage from "./pages/OrderConfirmationPage";
+import ProtectedRoute from "./components/ProtectedRoute";
 import { getToastEventName } from "./data/toastEvents";
 
 export default function App() {
@@ -57,7 +58,22 @@ export default function App() {
         <Route path="/about" element={<AboutContactPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/admin" element={<AdminPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders"
+          element={
+            <ProtectedRoute>
+              <Navigate to="/profile?tab=orders" replace />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/product/:productId" element={<ProductDetailPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

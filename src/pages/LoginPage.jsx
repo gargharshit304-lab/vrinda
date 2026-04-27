@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 import { apiRequest } from "../data/apiClient";
-import { setAuthSession } from "../data/authStorage";
+import { getAuthToken, setAuthSession } from "../data/authStorage";
 
 const slides = [
   "https://images.unsplash.com/photo-1608571423539-e951a5f2f25f?auto=format&fit=crop&w=1200&q=80",
@@ -12,6 +12,7 @@ const slides = [
 
 export default function LoginPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [tab, setTab] = useState("signin");
   const [slideIndex, setSlideIndex] = useState(0);
   const [signinStatus, setSigninStatus] = useState("");
@@ -36,6 +37,14 @@ export default function LoginPage() {
         : { title: "Create your account", copy: "Set up a new Vrinda account with your email and password." },
     [tab]
   );
+
+  const redirectTo = location.state?.from || "/";
+
+  useEffect(() => {
+    if (getAuthToken()) {
+      navigate("/", { replace: true });
+    }
+  }, [navigate]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -158,6 +167,7 @@ export default function LoginPage() {
       setAuthSession({ token: payload?.token, user: payload?.user });
       setSigninStatus(`Signed in as ${payload?.user?.name || "User"}.`);
       showToast("success", "Signin successful");
+      navigate(redirectTo, { replace: true });
     } catch (error) {
       setSigninStatus(error.message || "Email or password is incorrect.");
       showToast("error", "Signin unsuccessful");

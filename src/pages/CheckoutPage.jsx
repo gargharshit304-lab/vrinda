@@ -134,8 +134,7 @@ export default function CheckoutPage() {
           city: formData.city,
           pincode: formData.pincode
         },
-        paymentMethod: formData.paymentMethod === "upi" ? "FAKE_UPI" : "COD",
-        deliveryFee
+        paymentMethod: formData.paymentMethod === "upi" ? "FAKE_UPI" : "COD"
       });
 
       const orderData = {

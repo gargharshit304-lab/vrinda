@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
-import { fetchProducts } from "../data/productApi";
+import { fetchProducts as fetchProductsApi } from "../data/productApi";
 import { addToCart, getCartItems, removeCartItem, updateCartItemQuantity } from "../data/cartStorage";
 import { getAuthToken } from "../data/authStorage";
 import { getWishlistItems, toggleWishlistItem } from "../data/wishlistStorage";
@@ -35,7 +35,22 @@ export default function ShopPage() {
   const [lastChangedProductId, setLastChangedProductId] = useState("");
   const [lastHeartProductId, setLastHeartProductId] = useState("");
   const [quickViewProduct, setQuickViewProduct] = useState(null);
+  const initialLoadDoneRef = useRef(false);
   const searchQuery = useMemo(() => new URLSearchParams(location.search).get("q")?.trim() || "", [location.search]);
+
+  const loadLatestProducts = async (query) => {
+    setProductsLoading(true);
+    setProductsError("");
+    try {
+      const products = await fetchProductsApi(query);
+      setAllProducts(products);
+    } catch (error) {
+      setProductsError(error.message || "Unable to load products right now.");
+      setAllProducts([]);
+    } finally {
+      setProductsLoading(false);
+    }
+  };
 
   useEffect(() => {
     const refreshCart = () => setCartItems(getCartItems());
@@ -52,32 +67,19 @@ export default function ShopPage() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    loadLatestProducts(searchQuery);
+    initialLoadDoneRef.current = true;
+    // Run on component mount to always fetch latest products from backend.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    const loadProducts = async () => {
-      setProductsLoading(true);
-      setProductsError("");
-      try {
-        const products = await fetchProducts(searchQuery);
-        if (!cancelled) {
-          setAllProducts(products);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setProductsError(error.message || "Unable to load products right now.");
-          setAllProducts([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setProductsLoading(false);
-        }
-      }
-    };
-
-    loadProducts();
-    return () => {
-      cancelled = true;
-    };
+  useEffect(() => {
+    if (!initialLoadDoneRef.current) {
+      return;
+    }
+    loadLatestProducts(searchQuery);
+    // Search/filter URL changes and explicit refreshes should re-fetch latest data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, refreshKey]);
 
   const categories = useMemo(() => {

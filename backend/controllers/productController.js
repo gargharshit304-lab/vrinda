@@ -1,5 +1,7 @@
 import Product from "../models/Product.js";
 
+const isDevelopment = process.env.NODE_ENV !== "production";
+
 export const getProducts = async (req, res, next) => {
   try {
     const search = req.query.search?.trim();
@@ -30,12 +32,6 @@ export const createProduct = async (req, res, next) => {
     const body = req.body || {};
     const { name, slug, price, stock, description, category } = body;
 
-    // Debug logs to trace multipart field/file parsing.
-    // eslint-disable-next-line no-console
-    console.log("BODY:", req.body);
-    // eslint-disable-next-line no-console
-    console.log("FILES:", req.files);
-
     if (!Object.keys(body).length) {
       return res.status(400).json({ message: "Invalid form data received" });
     }
@@ -56,16 +52,18 @@ export const createProduct = async (req, res, next) => {
     const mainImageSizeBytes = imageFile?.size || 0;
     const additionalImagesSizeBytes = additionalFiles.reduce((total, file) => total + (file?.size || 0), 0);
 
-    // eslint-disable-next-line no-console
-    console.log("[product/create] payload", {
-      requestSizeBytes,
-      hasMainImage: Boolean(mainImageUrl),
-      additionalImageCount: additionalImageUrls.length,
-      mainImageSizeBytes,
-      additionalImagesSizeBytes,
-      hasName: Boolean(name),
-      hasSlug: Boolean(slug)
-    });
+    if (isDevelopment) {
+      // eslint-disable-next-line no-console
+      console.log("[product/create] payload", {
+        requestSizeBytes,
+        hasMainImage: Boolean(mainImageUrl),
+        additionalImageCount: additionalImageUrls.length,
+        mainImageSizeBytes,
+        additionalImagesSizeBytes,
+        hasName: Boolean(name),
+        hasSlug: Boolean(slug)
+      });
+    }
 
     if (typeof body.image === "string" && body.image.startsWith("data:image/")) {
       const error = new Error("Base64 image upload is no longer supported. Please upload files using multipart/form-data.");

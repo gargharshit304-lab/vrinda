@@ -2,6 +2,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
+const isDevelopment = process.env.NODE_ENV !== "production";
+
 const signToken = (userId, role) => {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
@@ -19,13 +21,15 @@ export const registerUser = async (req, res, next) => {
   try {
     const { name, email, password, role } = req.body;
 
-    // eslint-disable-next-line no-console
-    console.log("[auth/signup] Incoming request", {
-      hasName: Boolean(name),
-      email: email?.toLowerCase?.() || "",
-      passwordLength: typeof password === "string" ? password.length : 0,
-      role: role || "user"
-    });
+    if (isDevelopment) {
+      // eslint-disable-next-line no-console
+      console.log("[auth/signup] Incoming request", {
+        hasName: Boolean(name),
+        email: email?.toLowerCase?.() || "",
+        passwordLength: typeof password === "string" ? password.length : 0,
+        role: role || "user"
+      });
+    }
 
     if (!name || !email || !password) {
       const error = new Error("name, email, and password are required");
@@ -52,12 +56,14 @@ export const registerUser = async (req, res, next) => {
 
     const token = signToken(user._id.toString(), user.role);
 
-    // eslint-disable-next-line no-console
-    console.log("[auth/signup] User registered", {
-      userId: user._id.toString(),
-      email: user.email,
-      role: user.role
-    });
+    if (isDevelopment) {
+      // eslint-disable-next-line no-console
+      console.log("[auth/signup] User registered", {
+        userId: user._id.toString(),
+        email: user.email,
+        role: user.role
+      });
+    }
 
     res.status(201).json({
       message: "User registered",
@@ -65,8 +71,10 @@ export const registerUser = async (req, res, next) => {
       user: user.toSafeObject()
     });
   } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error("[auth/signup] Error:", error.message);
+    if (isDevelopment) {
+      // eslint-disable-next-line no-console
+      console.error("[auth/signup] Error:", error.message);
+    }
     next(error);
   }
 };
