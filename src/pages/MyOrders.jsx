@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 import { fetchMyOrders } from "../data/orderApi";
 
@@ -45,6 +46,7 @@ const getStatusMeta = (status) => {
 };
 
 export default function MyOrders() {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -60,9 +62,25 @@ export default function MyOrders() {
         if (!cancelled) {
           setOrders(data);
         }
-      } catch {
+      } catch (requestError) {
         if (!cancelled) {
-          setError("We could not load your orders right now.");
+          const status = Number(requestError?.status) || 0;
+
+          if (status === 401) {
+            setError("You are not logged in");
+            navigate("/login", {
+              replace: true,
+              state: {
+                from: "/orders",
+                message: "Please login to view your orders"
+              }
+            });
+          } else if (status >= 500) {
+            setError("Server error, try again later");
+          } else {
+            setError("We could not load your orders right now.");
+          }
+
           setOrders([]);
         }
       } finally {
@@ -77,7 +95,7 @@ export default function MyOrders() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [navigate]);
 
   const orderCards = useMemo(
     () =>

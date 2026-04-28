@@ -65,6 +65,13 @@ export default function LoginPage() {
   }, [location.search]);
 
   useEffect(() => {
+    const incomingMessage = location.state?.message;
+    if (incomingMessage) {
+      setSigninStatus(incomingMessage);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
     if (!toast.show) {
       return undefined;
     }

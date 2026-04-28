@@ -13,8 +13,15 @@ export const createOrderRequest = async ({ items, shippingAddress, paymentMethod
 };
 
 export const fetchOrders = async () => {
+  const token = typeof window !== "undefined" ? window.localStorage.getItem("token") : "";
+
   const data = await apiRequest("/orders", {
-    auth: true
+    auth: true,
+    headers: token
+      ? {
+          Authorization: `Bearer ${token}`
+        }
+      : undefined
   });
 
   return Array.isArray(data) ? data : [];

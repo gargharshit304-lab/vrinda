@@ -104,12 +104,32 @@ export const createOrder = async (req, res, next) => {
   }
 };
 
-export const getOrders = async (_req, res, next) => {
+export const getOrders = async (req, res, next) => {
   try {
-    const orders = await Order.find({})
-      .populate("user", "name email role")
+    const isAdmin = req.user?.role === "admin";
+
+    let query = Order.find(isAdmin ? {} : { user: req.user._id })
       .populate("items.product", "name image price")
       .sort({ createdAt: -1 });
+
+    if (isAdmin) {
+      query = query.populate("user", "name email role");
+    }
+
+    const orders = await query;
+
+    res.status(200).json(orders);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getMyOrders = async (req, res, next) => {
+  try {
+    const orders = await Order.find({ user: req.user._id })
+      .populate("items.product", "name image price")
+      .sort({ createdAt: -1 });
+
     res.status(200).json(orders);
   } catch (error) {
     next(error);
@@ -124,17 +144,6 @@ export const getOrderById = async (req, res, next) => {
     if (!order) {
       const error = new Error("Order not found");
       error.statusCode = 404;
-export const getMyOrders = async (req, res, next) => {
-  try {
-    const orders = await Order.find({ user: req.user._id })
-      .populate("items.product", "name image price")
-      .sort({ createdAt: -1 });
-
-    res.status(200).json(orders);
-  } catch (error) {
-    next(error);
-  }
-};
       throw error;
     }
 

@@ -4,7 +4,7 @@ import { adminMiddleware, authMiddleware } from "../middleware/authMiddleware.js
 
 const router = Router();
 
-router.route("/").get(authMiddleware, adminMiddleware, getOrders).post(authMiddleware, createOrder);
+router.route("/").get(authMiddleware, getOrders).post(authMiddleware, createOrder);
 router.get("/my", authMiddleware, getMyOrders);
 router.route("/:id").get(authMiddleware, getOrderById).patch(authMiddleware, adminMiddleware, updateOrderStatus).put(authMiddleware, adminMiddleware, updateOrderStatus);
 
