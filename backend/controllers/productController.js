@@ -27,6 +27,63 @@ export const getProductById = async (req, res, next) => {
   }
 };
 
+export const getSimilarProducts = async (req, res, next) => {
+  try {
+    const currentProduct = await Product.findById(req.params.id);
+
+    if (!currentProduct) {
+      const error = new Error("Product not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const category = String(currentProduct.category || "").trim();
+    const type = String(currentProduct.type || "").trim();
+    const currentPrice = Number(currentProduct.price) || 0;
+
+    const matchConditions = [{ category, _id: { $ne: currentProduct._id } }];
+
+    if (type) {
+      matchConditions.push({ type, _id: { $ne: currentProduct._id } });
+    }
+
+    const candidates = await Product.find({
+      status: "active",
+      _id: { $ne: currentProduct._id },
+      $or: matchConditions
+    }).sort({ createdAt: -1 }).limit(12);
+
+    const ranked = candidates
+      .map((product) => ({
+        product,
+        score: [product.category === currentProduct.category ? 2 : 0, type && product.type === type ? 2 : 0]
+          .reduce((sum, value) => sum + value, 0),
+        priceGap: Math.abs((Number(product.price) || 0) - currentPrice)
+      }))
+      .sort((a, b) => b.score - a.score || a.priceGap - b.priceGap || String(a.product.name).localeCompare(String(b.product.name)))
+      .map((entry) => entry.product)
+      .slice(0, 6);
+
+    if (ranked.length > 0) {
+      return res.status(200).json(ranked);
+    }
+
+    const fallback = await Product.aggregate([
+      {
+        $match: {
+          status: "active",
+          _id: { $ne: currentProduct._id }
+        }
+      },
+      { $sample: { size: 6 } }
+    ]);
+
+    return res.status(200).json(fallback);
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const createProduct = async (req, res, next) => {
   try {
     const body = req.body || {};
@@ -88,6 +145,7 @@ export const createProduct = async (req, res, next) => {
       name,
       slug,
       category: category || "All Products",
+      type: body.type || "",
       price,
       stock: stock ?? 0,
       description: description ?? "",

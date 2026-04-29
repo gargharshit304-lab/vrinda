@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 import { apiRequest } from "../data/apiClient";
 import { showToast } from "../data/toastEvents";
@@ -16,6 +17,7 @@ export default function ContactPage() {
   const [cooldown, setCooldown] = useState(false);
   const [error, setError] = useState("");
   const cooldownRef = useRef(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -33,15 +35,24 @@ export default function ContactPage() {
     setError("");
     setSubmitted(false);
 
-    const { name, email, message } = formData;
-    if (!name || !email || !message) {
-      setError("Please fill out all fields.");
+    // Ensure user is logged in before submitting
+    const token = typeof window !== "undefined" ? window.localStorage.getItem("token") : null;
+    if (!token) {
+      showToast("Please login to contact support", "warning");
+      navigate("/login");
+      return;
+    }
+
+    const { message } = formData;
+    if (!message) {
+      setError("Please enter a message.");
       return;
     }
 
     setLoading(true);
     try {
-      await apiRequest("/contact", { method: "POST", body: JSON.stringify({ name, email, message }) });
+      // Only send the message; backend will use authenticated user info
+      await apiRequest("/contact", { method: "POST", auth: true, body: JSON.stringify({ message }) });
       setSubmitted(true);
       setFormData(initialForm);
       // disable submit button briefly and show toast
@@ -99,7 +110,7 @@ export default function ContactPage() {
                   type="text"
                   value={formData.name}
                   onChange={handleChange}
-                  required
+                  
                   className="w-full rounded-xl border border-sage-200/85 bg-white px-3.5 py-2.5 text-sm text-sage-800 outline-none transition focus:border-sage-400"
                   placeholder="Your name"
                 />
@@ -115,7 +126,7 @@ export default function ContactPage() {
                   type="email"
                   value={formData.email}
                   onChange={handleChange}
-                  required
+                  
                   className="w-full rounded-xl border border-sage-200/85 bg-white px-3.5 py-2.5 text-sm text-sage-800 outline-none transition focus:border-sage-400"
                   placeholder="you@example.com"
                 />

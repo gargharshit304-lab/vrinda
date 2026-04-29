@@ -4,7 +4,7 @@ import { authMiddleware, adminMiddleware } from "../middleware/authMiddleware.js
 
 const router = express.Router();
 
-router.post("/", createContactMessage);
+router.post("/", authMiddleware, createContactMessage);
 
 // Admin-only: list all contact messages
 router.get("/", authMiddleware, adminMiddleware, getAllContacts);

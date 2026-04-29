@@ -20,13 +20,7 @@ const formatDateTime = (value) => {
     return "-";
   }
 
-  return parsed.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
+  return parsed.toLocaleString();
 };
 
 const getStatusTone = (status) => {
@@ -49,25 +43,56 @@ const getStatusTone = (status) => {
 
 const getTrackingStatus = (order) => order?.status || order?.orderStatus || "Pending";
 
-const getTimelineTimestamp = (order, stepLabel, fallbackIndex, currentStatus) => {
-  const history = Array.isArray(order?.statusHistory) ? order.statusHistory : [];
+const getProgress = (status) => {
+  const normalized = String(status || "Pending").trim().toLowerCase();
+
+  switch (normalized) {
+    case "pending":
+      return 25;
+    case "packed":
+      return 50;
+    case "shipped":
+    case "out for delivery":
+      return 75;
+    case "delivered":
+      return 100;
+    default:
+      return 0;
+  }
+};
+
+const getTimelineTimestamp = (order, stepLabel) => {
+  const history = order?.statusHistory;
   const normalizedStep = String(stepLabel || "").trim().toLowerCase();
-  const match = history.find((entry) => String(entry?.status || "").trim().toLowerCase() === normalizedStep);
 
-  if (match?.updatedAt) {
-    return match.updatedAt;
+  if (history && typeof history === "object" && !Array.isArray(history)) {
+    if (normalizedStep === "pending") {
+      return history.pendingAt || order?.createdAt || "";
+    }
+
+    if (normalizedStep === "packed") {
+      return history.packedAt || "";
+    }
+
+    if (normalizedStep === "out for delivery") {
+      return history.outForDeliveryAt || "";
+    }
+
+    if (normalizedStep === "delivered") {
+      return history.deliveredAt || "";
+    }
   }
 
-  if (fallbackIndex === 0) {
-    return order?.createdAt;
+  if (Array.isArray(history)) {
+    const match = history.find((entry) => {
+      const entryStatus = String(entry?.status || "").trim().toLowerCase();
+      return entryStatus === normalizedStep || (normalizedStep === "out for delivery" && entryStatus === "shipped");
+    });
+
+    return match?.updatedAt || (normalizedStep === "pending" ? order?.createdAt || "" : "");
   }
 
-  const normalizedCurrent = String(currentStatus || "").trim().toLowerCase();
-  if (normalizedCurrent === normalizedStep) {
-    return order?.updatedAt || order?.createdAt;
-  }
-
-  return "";
+  return normalizedStep === "pending" ? order?.createdAt || "" : "";
 };
 
 const buildTimeline = (status) => {
@@ -169,6 +194,7 @@ export default function OrderDetailPage() {
   const trackingStatus = getTrackingStatus(order);
   const statusTone = getStatusTone(trackingStatus);
   const timeline = useMemo(() => buildTimeline(trackingStatus), [trackingStatus]);
+  const progress = getProgress(trackingStatus);
   const timelineKey = `${trackingStatus}-${statusPulseKey}`;
 
   return (
@@ -282,65 +308,68 @@ export default function OrderDetailPage() {
                       </span>
                     </div>
 
-                    <div key={timelineKey} className="mt-5 space-y-4 timeline-pop">
-                      {timeline.map((step, index) => {
+                    <div key={timelineKey} className="mt-6">
+                      <div className="relative px-1 pb-10 pt-2 sm:px-3">
+                        <div className="absolute left-6 right-6 top-8 h-1 rounded-full bg-slate-200/90 sm:left-8 sm:right-8" />
+                        <div
+                          className="absolute left-6 top-8 h-1 rounded-full bg-gradient-to-r from-emerald-400 via-green-500 to-emerald-600 shadow-[0_0_18px_rgba(34,197,94,0.24)] transition-[width] duration-700 ease-in-out sm:left-8"
+                          style={{ width: `${progress}%` }}
+                        />
+
+                        <div className="relative z-10 grid grid-cols-4 gap-3 sm:gap-4">
+                          {timeline.map((step, index) => {
                         const isCompleted = step.state === "completed";
                         const isCurrent = step.state === "current";
-                        const stepTimestamp = getTimelineTimestamp(order, step.label, index, trackingStatus);
+                        const stepTimestamp = getTimelineTimestamp(order, step.label);
+                        const stepTimestampLabel = step.label === "Pending" ? "Placed on" : `${step.label} on`;
 
                         return (
-                          <div key={step.label} className="flex gap-4">
-                            <div className="flex flex-col items-center pt-1">
+                          <div key={step.label} className="flex flex-col items-center text-center">
+                            <div className="flex items-center justify-center">
                               <div
-                                className={`flex h-11 w-11 items-center justify-center rounded-full border-2 text-lg transition-all duration-500 ${
+                                className={`relative flex h-12 w-12 items-center justify-center rounded-full border-2 text-lg transition-all duration-500 ${
                                   isCompleted
                                     ? "border-emerald-500 bg-emerald-500 text-white shadow-[0_10px_24px_rgba(16,185,129,0.22)]"
                                     : isCurrent
-                                      ? "timeline-step-current border-emerald-300 bg-emerald-50 text-emerald-600"
+                                      ? "timeline-step-current border-emerald-300 bg-emerald-50 text-emerald-600 shadow-[0_0_0_6px_rgba(52,211,153,0.12),0_10px_24px_rgba(16,185,129,0.18)]"
                                       : "border-sage-300 bg-white text-sage-300"
                                 }`}
                               >
+                                {isCurrent && (
+                                  <span className="absolute inset-0 -z-10 animate-ping rounded-full bg-emerald-300/30" />
+                                )}
                                 {step.icon}
                               </div>
-
-                              {index < timeline.length - 1 && (
-                                <div className={`mt-1 w-0.5 flex-1 rounded-full transition-all duration-500 ${isCompleted ? "bg-emerald-500" : "bg-sage-200"}`} />
-                              )}
                             </div>
 
-                            <div className="min-w-0 flex-1 pt-1.5 pb-4">
-                              <div className="flex items-center justify-between gap-3">
-                                <p className={`text-sm font-bold transition-colors duration-300 ${isCompleted ? "text-emerald-700" : "text-sage-600"}`}>
-                                  {step.label}
-                                </p>
-                                <span className={`text-[11px] font-extrabold uppercase tracking-[0.12em] ${isCompleted ? "text-emerald-600" : "text-sage-400"}`}>
-                                  {isCompleted ? "Done" : isCurrent ? "Current" : "Pending"}
-                                </span>
-                              </div>
-
-                              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-sage-100">
-                                <div
-                                  className={`h-full rounded-full transition-all duration-500 ${
-                                    isCompleted ? "w-full bg-emerald-500" : isCurrent ? "w-1/2 bg-emerald-300" : "w-0 bg-transparent"
-                                  }`}
-                                />
-                              </div>
+                            <div className="mt-4 max-w-[11rem] space-y-1">
+                              <p className={`text-sm font-bold transition-colors duration-300 ${isCompleted ? "text-emerald-700" : "text-sage-600"}`}>
+                                {step.label}
+                              </p>
+                              <span className={`inline-flex text-[11px] font-extrabold uppercase tracking-[0.12em] ${isCompleted ? "text-emerald-600" : "text-sage-400"}`}>
+                                {isCompleted ? "Done" : isCurrent ? "Current" : "Pending"}
+                              </span>
 
                               {stepTimestamp ? (
-                                <p className="mt-2 text-xs font-medium text-sage-500">
-                                  {step.label} - {formatDateTime(stepTimestamp)}
+                                <p className="text-xs font-medium leading-relaxed text-sage-500">
+                                  {stepTimestampLabel}: {formatDateTime(stepTimestamp)}
                                 </p>
-                              ) : null}
-
-                              {isCurrent && (
-                                <p className="mt-2 inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.12em] text-emerald-700">
-                                  Current Status
-                                </p>
+                              ) : (
+                                <p className="text-xs font-medium text-sage-400">Pending</p>
                               )}
                             </div>
                           </div>
                         );
                       })}
+                        </div>
+                      </div>
+
+                      <div className="mt-1 flex items-center justify-between text-[11px] font-extrabold uppercase tracking-[0.14em] text-sage-400">
+                        <span>Placed</span>
+                        <span>Processing</span>
+                        <span>On Route</span>
+                        <span>Delivered</span>
+                      </div>
                     </div>
                   </article>
 

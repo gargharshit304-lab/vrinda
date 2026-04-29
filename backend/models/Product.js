@@ -18,6 +18,11 @@ const productSchema = new mongoose.Schema(
       default: "All Products",
       trim: true
     },
+    type: {
+      type: String,
+      default: "",
+      trim: true
+    },
     description: {
       type: String,
       default: ""

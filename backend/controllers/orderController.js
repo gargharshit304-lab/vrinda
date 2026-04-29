@@ -19,12 +19,38 @@ const normalizeOrderStatus = (value) => {
   return canonicalOrderStatuses[normalized] || null;
 };
 
-const pushStatusHistory = (order, status, timestamp = new Date()) => {
-  const history = Array.isArray(order.statusHistory) ? order.statusHistory : [];
-  const lastEntry = history[history.length - 1];
+const getStatusHistory = (order) => {
+  const history = order?.statusHistory;
 
-  if (lastEntry?.status !== status) {
-    history.push({ status, updatedAt: timestamp });
+  if (history && typeof history === "object" && !Array.isArray(history)) {
+    return history;
+  }
+
+  return {
+    pendingAt: null,
+    packedAt: null,
+    outForDeliveryAt: null,
+    deliveredAt: null
+  };
+};
+
+const applyStatusTimestamp = (order, status, timestamp = new Date()) => {
+  const history = getStatusHistory(order);
+
+  if (status === "Pending") {
+    history.pendingAt = history.pendingAt || timestamp;
+  }
+
+  if (status === "Packed") {
+    history.packedAt = history.packedAt || timestamp;
+  }
+
+  if (status === "Out for Delivery") {
+    history.outForDeliveryAt = history.outForDeliveryAt || timestamp;
+  }
+
+  if (status === "Delivered") {
+    history.deliveredAt = history.deliveredAt || timestamp;
   }
 
   order.statusHistory = history;
@@ -54,24 +80,31 @@ export const createOrder = async (req, res, next) => {
       const productId = String(item?.productId || item?.product || "").trim();
       const quantity = Number(item?.quantity);
 
-      if (!quantity || quantity <= 0) {
-        const error = new Error("Quantity must be greater than 0");
+      if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
+        const error = new Error("Invalid order");
         error.statusCode = 400;
         throw error;
       }
 
-      if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
-        const error = new Error("Product unavailable or insufficient stock");
+      if (!quantity || quantity <= 0) {
+        const error = new Error("Invalid order");
         error.statusCode = 400;
         throw error;
       }
 
       const product = await Product.findById(productId);
+
+      if (!product) {
+        const error = new Error("Product not found");
+        error.statusCode = 404;
+        throw error;
+      }
+
       const isActive = product?.status === "active";
       const hasEnoughStock = Number(product?.stock) >= quantity;
 
-      if (!product || !isActive || !hasEnoughStock) {
-        const error = new Error("Product unavailable or insufficient stock");
+      if (!isActive || !hasEnoughStock) {
+        const error = new Error("Invalid order");
         error.statusCode = 400;
         throw error;
       }
@@ -106,7 +139,12 @@ export const createOrder = async (req, res, next) => {
       shippingAddress,
       paymentMethod,
       status: "Pending",
-      statusHistory: [{ status: "Pending", updatedAt: new Date() }],
+      statusHistory: {
+        pendingAt: new Date(),
+        packedAt: null,
+        outForDeliveryAt: null,
+        deliveredAt: null
+      },
       orderStatus: "processing",
       subtotal,
       deliveryFee,
@@ -165,13 +203,16 @@ export const getOrderById = async (req, res, next) => {
       throw error;
     }
 
-    const isAdmin = req.user?.role === "admin";
-    const isOwner = req.user && order.user && order.user.toString() === req.user._id.toString();
+    const orderUserId = order.user?._id ? order.user._id.toString() : order.user?.toString?.() || "";
+    const loggedInUserId = req.user?._id?.toString?.() || "";
 
-    if (!isAdmin && !isOwner) {
-      const error = new Error("Forbidden: cannot access this order");
-      error.statusCode = 403;
-      throw error;
+    // eslint-disable-next-line no-console
+    console.log("Order user:", order.user);
+    // eslint-disable-next-line no-console
+    console.log("Logged in user:", req.user?._id);
+
+    if (orderUserId !== loggedInUserId && req.user?.role !== "admin") {
+      return res.status(403).json({ message: "Forbidden" });
     }
 
     res.status(200).json(order);
@@ -201,7 +242,7 @@ export const updateOrderStatus = async (req, res, next) => {
 
     order.status = nextStatus.status;
     order.orderStatus = nextStatus.orderStatus;
-    pushStatusHistory(order, nextStatus.status);
+  applyStatusTimestamp(order, nextStatus.status);
     await order.save();
 
     const populatedOrder = await Order.findById(order._id)

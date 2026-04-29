@@ -27,6 +27,19 @@ const formatDate = (value) => {
   });
 };
 
+const formatDateTime = (value) => {
+  if (!value) {
+    return "";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toLocaleString();
+};
+
 const getStatusMeta = (status) => {
   const normalized = String(status || "processing").trim().toLowerCase();
 
@@ -65,8 +78,42 @@ const getTrackingStatusTone = (status) => {
   return { label: "Pending", className: "status-pending" };
 };
 
+const getTimelineTimestamp = (order, stepLabel) => {
+  const history = order?.statusHistory;
+  const step = String(stepLabel || "").trim().toLowerCase();
+
+  if (history && typeof history === "object" && !Array.isArray(history)) {
+    if (step === "pending") {
+      return history.pendingAt || order?.createdAt || "";
+    }
+
+    if (step === "packed") {
+      return history.packedAt || "";
+    }
+
+    if (step === "out for delivery") {
+      return history.outForDeliveryAt || "";
+    }
+
+    if (step === "delivered") {
+      return history.deliveredAt || "";
+    }
+  }
+
+  if (Array.isArray(history)) {
+    const match = history.find((entry) => {
+      const entryStatus = String(entry?.status || "").trim().toLowerCase();
+      return entryStatus === step || (step === "out for delivery" && entryStatus === "shipped");
+    });
+
+    return match?.updatedAt || (step === "pending" ? order?.createdAt || "" : "");
+  }
+
+  return step === "pending" ? order?.createdAt || "" : "";
+};
+
 // Order Timeline Component
-function OrderTimeline({ status }) {
+function OrderTimeline({ order, status }) {
   const steps = ["Pending", "Packed", "Out for Delivery", "Delivered"];
   const statusMap = {
     "pending": 0,
@@ -96,9 +143,14 @@ function OrderTimeline({ status }) {
         {steps.map((step, index) => {
           const isCompleted = index <= currentStepIndex;
           const isCurrent = index === currentStepIndex;
+          const timestamp = getTimelineTimestamp(order, step);
+          const timestampLabel = step === "Pending" ? "Placed on" : `${step} on`;
 
           return (
-            <div key={step} className="flex items-start gap-4 rounded-2xl px-1 py-1 transition duration-300 hover:bg-white/70">
+            <div
+              key={step}
+              className={`flex items-start gap-4 rounded-2xl px-1 py-1 transition duration-300 hover:bg-white/70 ${isCurrent ? "bg-emerald-50/50" : ""}`}
+            >
               <div className="flex flex-col items-center pt-0.5">
                 <div
                   className={`relative z-10 flex h-11 w-11 items-center justify-center rounded-full border-2 transition-all duration-500 ${
@@ -141,6 +193,11 @@ function OrderTimeline({ status }) {
                     }`}
                   />
                 </div>
+                {timestamp ? (
+                  <p className="mt-2 text-xs font-medium text-sage-500">{timestampLabel}: {formatDateTime(timestamp)}</p>
+                ) : (
+                  <p className="mt-2 text-xs font-medium text-sage-400">Pending</p>
+                )}
                 {isCurrent && <p className="mt-2 text-xs font-medium text-emerald-600">Your order is here now</p>}
               </div>
             </div>
@@ -324,7 +381,7 @@ export default function MyOrders() {
             {/* Order Timeline (Expandable) */}
             {isExpanded && (
               <div className="mt-4 transition-all duration-500 ease-out">
-                <OrderTimeline status={getOrderTrackingStatus(order)} />
+                <OrderTimeline order={order} status={getOrderTrackingStatus(order)} />
               </div>
             )}
           </article>

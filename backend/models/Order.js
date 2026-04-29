@@ -62,19 +62,24 @@ const orderSchema = new mongoose.Schema(
       enum: ["Pending", "Packed", "Out for Delivery", "Delivered"],
       default: "Pending"
     },
-    statusHistory: [
-      {
-        status: {
-          type: String,
-          enum: ["Pending", "Packed", "Out for Delivery", "Delivered"],
-          required: true
-        },
-        updatedAt: {
-          type: Date,
-          required: true
-        }
+    statusHistory: {
+      pendingAt: {
+        type: Date,
+        default: null
+      },
+      packedAt: {
+        type: Date,
+        default: null
+      },
+      outForDeliveryAt: {
+        type: Date,
+        default: null
+      },
+      deliveredAt: {
+        type: Date,
+        default: null
       }
-    ],
+    },
     orderStatus: {
       type: String,
       enum: ["processing", "packed", "shipped", "delivered", "cancelled"],

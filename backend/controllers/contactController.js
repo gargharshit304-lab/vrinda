@@ -2,17 +2,30 @@ import Contact from "../models/Contact.js";
 
 export const createContactMessage = async (req, res, next) => {
   try {
-    const { name, email, message } = req.body || {};
+    // Require authenticated user (authMiddleware should attach req.user)
+    if (!req.user) {
+      const error = new Error("Unauthorized: authentication required");
+      error.statusCode = 401;
+      throw error;
+    }
 
-    if (!name || !email || !message) {
-      const error = new Error("All fields (name, email, message) are required");
+    const { message } = req.body || {};
+
+    if (!message) {
+      const error = new Error("Message is required");
       error.statusCode = 400;
       throw error;
     }
 
-    await Contact.create({ name: String(name).trim(), email: String(email).trim().toLowerCase(), message: String(message).trim() });
+    // Do NOT trust frontend-provided name/email — use authenticated user data
+    const created = await Contact.create({
+      user: req.user._id,
+      name: String(req.user.name || "").trim(),
+      email: String(req.user.email || "").trim().toLowerCase(),
+      message: String(message).trim()
+    });
 
-    res.status(201).json({ success: true, message: "Message sent successfully" });
+    res.status(201).json({ success: true, message: "Message sent successfully", data: created });
   } catch (error) {
     next(error);
   }

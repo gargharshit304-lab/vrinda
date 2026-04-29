@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
-import { fetchProductById, fetchProducts } from "../data/productApi";
+import { fetchProductById, fetchProducts, fetchSimilarProducts } from "../data/productApi";
 import { addToCart } from "../data/cartStorage";
 import { getAuthToken } from "../data/authStorage";
 
@@ -62,6 +62,7 @@ export default function ProductDetailPage() {
   const [reviewForm, setReviewForm] = useState({ name: "", rating: "5", comment: "" });
   const [hoverRating, setHoverRating] = useState(0);
   const [clickedRating, setClickedRating] = useState(0);
+  const [similarProducts, setSimilarProducts] = useState([]);
   const isAdminUser = isAdminAccount();
 
   useEffect(() => {
@@ -104,6 +105,43 @@ export default function ProductDetailPage() {
     };
   }, [productId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSimilarProducts = async () => {
+      if (!productId) {
+        if (!cancelled) {
+          setSimilarProducts([]);
+        }
+        return;
+      }
+
+      try {
+        const data = await fetchSimilarProducts(productId);
+        if (!cancelled) {
+          setSimilarProducts(data);
+        }
+      } catch {
+        if (!cancelled) {
+          setSimilarProducts([]);
+        }
+      }
+    };
+
+    loadSimilarProducts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [productId]);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.log("[product/similar]", similarProducts);
+    }
+  }, [similarProducts]);
+
   const mainImage = product?.images?.[activeImageIndex] || product?.images?.[0];
 
   const infoContent = useMemo(() => {
@@ -136,9 +174,38 @@ export default function ProductDetailPage() {
     }
 
     return allProducts
-      .filter((item) => item.id !== product.id && item.category === product.category)
+      .filter((item) => item.id !== product.id && (item.category === product.category || item.type === product.type))
+      .sort((a, b) => {
+        const aCategoryScore = a.category === product.category ? 2 : 0;
+        const bCategoryScore = b.category === product.category ? 2 : 0;
+        const aTypeScore = a.type && product.type && a.type === product.type ? 2 : 0;
+        const bTypeScore = b.type && product.type && b.type === product.type ? 2 : 0;
+        const aPriceGap = Math.abs((Number(a.price) || 0) - (Number(product.price) || 0));
+        const bPriceGap = Math.abs((Number(b.price) || 0) - (Number(product.price) || 0));
+
+        return (bCategoryScore + bTypeScore) - (aCategoryScore + aTypeScore) || aPriceGap - bPriceGap;
+      })
       .slice(0, 4);
   }, [allProducts, product]);
+
+  const fallbackSimilarProducts = useMemo(() => {
+    const backendList = Array.isArray(similarProducts) ? similarProducts : [];
+
+    if (backendList.length > 0) {
+      return backendList;
+    }
+
+    if (!product) {
+      return [];
+    }
+
+    const randomPool = allProducts
+      .filter((item) => item.id !== product.id)
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 4);
+
+    return relatedProducts.length > 0 ? relatedProducts : randomPool;
+  }, [allProducts, product, relatedProducts, similarProducts]);
 
   const handleAddToCart = () => {
     if (isAdminUser) {
@@ -347,15 +414,15 @@ export default function ProductDetailPage() {
           </div>
         </section>
 
-        {relatedProducts.length > 0 ? (
+        {fallbackSimilarProducts.length > 0 ? (
           <section className="glass-card rounded-3xl border border-white/70 bg-white/65 p-5 shadow-soft sm:p-6">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="font-display text-3xl text-sage-800">Related Products</h2>
+              <h2 className="font-display text-3xl text-sage-800">Similar Products</h2>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-sage-700/70">You may also like</p>
             </div>
 
             <div className="-mx-1 flex snap-x gap-4 overflow-x-auto px-1 pb-1 lg:mx-0 lg:grid lg:grid-cols-4 lg:overflow-visible lg:px-0">
-              {relatedProducts.map((item) => {
+              {fallbackSimilarProducts.map((item) => {
                 const itemPrice = item.onSale && item.salePercent > 0
                   ? Math.max(1, Math.round(item.price * (1 - item.salePercent / 100)))
                   : item.price;
@@ -392,7 +459,12 @@ export default function ProductDetailPage() {
               })}
             </div>
           </section>
-        ) : null}
+        ) : (
+          <section className="glass-card rounded-3xl border border-white/70 bg-white/65 p-5 text-center shadow-soft sm:p-6">
+            <h2 className="font-display text-3xl text-sage-800">Similar Products</h2>
+            <p className="mt-2 text-sm text-sage-600">No similar products available</p>
+          </section>
+        )}
 
         <section className="glass-card rounded-3xl border border-white/70 bg-white/65 p-5 shadow-soft sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">

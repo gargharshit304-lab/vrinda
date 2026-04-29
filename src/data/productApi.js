@@ -49,3 +49,15 @@ export const deleteProduct = async (productId) => {
     auth: true
   });
 };
+
+export const fetchSimilarProducts = async (productId) => {
+  if (!productId) {
+    return [];
+  }
+
+  const data = await apiRequest(`/products/similar/${encodeURIComponent(productId)}`, {
+    method: "GET"
+  });
+
+  return Array.isArray(data) ? data : [];
+};

@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "../data/apiClient";
 
+const buildReplyMailto = (message) => {
+  const recipient = encodeURIComponent(message?.email || "");
+  const subject = encodeURIComponent("Regarding your query");
+  const body = encodeURIComponent(`Hi ${message?.name || "there"},\n\n`);
+
+  return `https://mail.google.com/mail/?view=cm&fs=1&to=${recipient}&su=${subject}&body=${body}`;
+};
+
 export default function AdminContactMessages() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +57,7 @@ export default function AdminContactMessages() {
                   <th className="px-4 py-3">Email</th>
                   <th className="px-4 py-3">Message</th>
                   <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -58,6 +67,16 @@ export default function AdminContactMessages() {
                     <td className="px-4 py-3 align-top text-sm text-sage-700">{m.email}</td>
                     <td className="px-4 py-3 align-top text-sm text-sage-700">{m.message}</td>
                     <td className="px-4 py-3 align-top text-sm text-sage-600">{new Date(m.createdAt).toLocaleString()}</td>
+                    <td className="px-4 py-3 align-top">
+                      <a
+                        href={buildReplyMailto(m)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-extrabold uppercase tracking-[0.12em] text-emerald-700 transition duration-300 hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-100 hover:text-emerald-800 hover:shadow-sm"
+                      >
+                        Reply
+                      </a>
+                    </td>
                   </tr>
                 ))}
               </tbody>
