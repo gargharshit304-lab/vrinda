@@ -34,3 +34,13 @@ export const fetchMyOrders = async () => {
 
   return Array.isArray(data) ? data : [];
 };
+
+export const fetchOrderById = async (id) => {
+  if (!id) {
+    throw new Error("Order id is required");
+  }
+
+  return apiRequest(`/orders/${encodeURIComponent(id)}`, {
+    auth: true
+  });
+};

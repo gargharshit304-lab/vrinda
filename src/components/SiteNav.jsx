@@ -311,6 +311,12 @@ export default function SiteNav() {
                 <span className="absolute -bottom-0.5 left-1/2 h-[2px] w-0 -translate-x-1/2 rounded-full bg-[#1f3d2b] transition-all duration-300 group-hover:w-8" />
               </span>
             </NavLink>
+            <NavLink to="/contact" className={navLinkClass}>
+              <span className="relative inline-flex items-center pb-1.5">
+                Contact
+                <span className="absolute -bottom-0.5 left-1/2 h-[2px] w-0 -translate-x-1/2 rounded-full bg-[#1f3d2b] transition-all duration-300 group-hover:w-8" />
+              </span>
+            </NavLink>
           </nav>
 
           <form ref={searchRef} onSubmit={handleSearchSubmit} className="relative w-full max-w-[280px]">
@@ -597,6 +603,9 @@ export default function SiteNav() {
           ) : null}
           <MobileLink to="/about" onClick={() => setMobileOpen(false)}>
             About
+          </MobileLink>
+          <MobileLink to="/contact" onClick={() => setMobileOpen(false)}>
+            Contact
           </MobileLink>
           {!currentUser ? (
             <div className="mt-1 grid grid-cols-2 gap-2">

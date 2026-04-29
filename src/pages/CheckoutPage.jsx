@@ -63,6 +63,13 @@ export default function CheckoutPage() {
     };
   }, []);
 
+  // Redirect unauthenticated users to login
+  useEffect(() => {
+    if (!getAuthToken()) {
+      navigate("/login");
+    }
+  }, [navigate]);
+
   const subtotal = useMemo(
     () => cartItems.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0),
     [cartItems]

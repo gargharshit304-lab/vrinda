@@ -5,9 +5,32 @@ import Product from "../models/Product.js";
 
 const buildOrderNumber = () => `ORD-${nanoid(10)}`;
 
-export const createOrder = async (req, res, next) => {
-  const session = await mongoose.startSession();
+const canonicalOrderStatuses = {
+  pending: { status: "Pending", orderStatus: "processing" },
+  processing: { status: "Pending", orderStatus: "processing" },
+  packed: { status: "Packed", orderStatus: "packed" },
+  "out for delivery": { status: "Out for Delivery", orderStatus: "shipped" },
+  shipped: { status: "Out for Delivery", orderStatus: "shipped" },
+  delivered: { status: "Delivered", orderStatus: "delivered" }
+};
 
+const normalizeOrderStatus = (value) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  return canonicalOrderStatuses[normalized] || null;
+};
+
+const pushStatusHistory = (order, status, timestamp = new Date()) => {
+  const history = Array.isArray(order.statusHistory) ? order.statusHistory : [];
+  const lastEntry = history[history.length - 1];
+
+  if (lastEntry?.status !== status) {
+    history.push({ status, updatedAt: timestamp });
+  }
+
+  order.statusHistory = history;
+};
+
+export const createOrder = async (req, res, next) => {
   try {
     if (req.user?.role === "admin") {
       return res.status(403).json({
@@ -24,73 +47,70 @@ export const createOrder = async (req, res, next) => {
       throw error;
     }
 
-    let order;
-    let totalPrice = 0;
+    const normalizedItems = [];
+    let subtotal = 0;
 
-    await session.withTransaction(async () => {
-      const normalizedItems = [];
-      let subtotal = 0;
+    for (const item of items) {
+      const productId = String(item?.productId || item?.product || "").trim();
+      const quantity = Number(item?.quantity);
 
-      for (const item of items) {
-        const productId = String(item?.productId || item?.product || "").trim();
-        const quantity = Number(item?.quantity);
-
-        if (!quantity || quantity <= 0) {
-          const error = new Error("Quantity must be greater than 0");
-          error.statusCode = 400;
-          throw error;
-        }
-
-        if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
-          const error = new Error("Product unavailable or insufficient stock");
-          error.statusCode = 400;
-          throw error;
-        }
-
-        const product = await Product.findById(productId).session(session);
-        const isActive = product?.status === "active";
-        const hasEnoughStock = Number(product?.stock) >= quantity;
-
-        if (!product || !isActive || !hasEnoughStock) {
-          const error = new Error("Product unavailable or insufficient stock");
-          error.statusCode = 400;
-          throw error;
-        }
-
-        const productPrice = Number(product.price) || 0;
-        subtotal += productPrice * quantity;
-
-        product.stock -= quantity;
-        await product.save({ session });
-
-        normalizedItems.push({
-          product: product._id,
-          name: product.name,
-          price: productPrice,
-          quantity
-        });
+      if (!quantity || quantity <= 0) {
+        const error = new Error("Quantity must be greater than 0");
+        error.statusCode = 400;
+        throw error;
       }
 
-      const deliveryFee = Number(process.env.DEFAULT_DELIVERY_FEE) || 0;
-      totalPrice = subtotal + deliveryFee;
+      if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
+        const error = new Error("Product unavailable or insufficient stock");
+        error.statusCode = 400;
+        throw error;
+      }
 
-      const createdOrders = await Order.create(
-        [
-          {
-            orderNumber: buildOrderNumber(),
-            user: req.user?._id,
-            items: normalizedItems,
-            shippingAddress,
-            paymentMethod,
-            subtotal,
-            deliveryFee,
-            totalAmount: totalPrice
-          }
-        ],
-        { session }
-      );
+      const product = await Product.findById(productId);
+      const isActive = product?.status === "active";
+      const hasEnoughStock = Number(product?.stock) >= quantity;
 
-      [order] = createdOrders;
+      if (!product || !isActive || !hasEnoughStock) {
+        const error = new Error("Product unavailable or insufficient stock");
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const productPrice = Number(product.price) || 0;
+      subtotal += productPrice * quantity;
+
+      product.stock -= quantity;
+      await product.save();
+
+      normalizedItems.push({
+        product: product._id,
+        name: product.name,
+        price: productPrice,
+        quantity
+      });
+    }
+
+    const deliveryFee = Number(process.env.DEFAULT_DELIVERY_FEE) || 0;
+    const totalPrice = subtotal + deliveryFee;
+
+    if (totalPrice <= 0) {
+      const error = new Error("Invalid order");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const order = await Order.create({
+      orderNumber: buildOrderNumber(),
+      user: req.user?._id,
+      items: normalizedItems,
+      shippingAddress,
+      paymentMethod,
+      status: "Pending",
+      statusHistory: [{ status: "Pending", updatedAt: new Date() }],
+      orderStatus: "processing",
+      subtotal,
+      deliveryFee,
+      totalAmount: totalPrice
     });
 
     res.status(201).json({
@@ -99,8 +119,6 @@ export const createOrder = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
-  } finally {
-    await session.endSession();
   }
 };
 
@@ -164,7 +182,7 @@ export const getOrderById = async (req, res, next) => {
 
 export const updateOrderStatus = async (req, res, next) => {
   try {
-    const { status } = req.body;
+    const { status, orderStatus } = req.body;
     const order = await Order.findById(req.params.id);
 
     if (!order) {
@@ -173,24 +191,17 @@ export const updateOrderStatus = async (req, res, next) => {
       throw error;
     }
 
-    const normalizedStatus = String(status || order.orderStatus || "").trim().toLowerCase();
-    const statusMap = {
-      pending: "processing",
-      packed: "packed",
-      "out for delivery": "shipped",
-      delivered: "delivered",
-      processing: "processing",
-      shipped: "shipped",
-      cancelled: "cancelled"
-    };
+    const nextStatus = normalizeOrderStatus(status || orderStatus);
 
-    if (!statusMap[normalizedStatus]) {
+    if (!nextStatus) {
       const error = new Error("Invalid order status");
       error.statusCode = 400;
       throw error;
     }
 
-    order.orderStatus = statusMap[normalizedStatus];
+    order.status = nextStatus.status;
+    order.orderStatus = nextStatus.orderStatus;
+    pushStatusHistory(order, nextStatus.status);
     await order.save();
 
     const populatedOrder = await Order.findById(order._id)

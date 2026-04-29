@@ -7,11 +7,13 @@ import AdminPage from "./pages/AdminPage";
 import ProfilePage from "./pages/ProfilePage";
 import ProductDetailPage from "./pages/ProductDetailPage";
 import AboutContactPage from "./pages/AboutContactPage";
+import ContactPage from "./pages/ContactPage";
 import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import WishlistPage from "./pages/WishlistPage";
 import OrderConfirmationPage from "./pages/OrderConfirmationPage";
 import MyOrders from "./pages/MyOrders";
+import OrderDetailPage from "./pages/OrderDetailPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { getToastEventName } from "./data/toastEvents";
 
@@ -57,7 +59,9 @@ export default function App() {
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/order-confirmation" element={<OrderConfirmationPage />} />
         <Route path="/about" element={<AboutContactPage />} />
+        <Route path="/contact" element={<ContactPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<LoginPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route
           path="/profile"
@@ -72,6 +76,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <MyOrders />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/orders/:id"
+          element={
+            <ProtectedRoute>
+              <OrderDetailPage />
             </ProtectedRoute>
           }
         />

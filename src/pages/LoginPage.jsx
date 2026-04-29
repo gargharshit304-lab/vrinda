@@ -41,10 +41,8 @@ export default function LoginPage() {
   const redirectTo = location.state?.from || "/";
 
   useEffect(() => {
-    if (getAuthToken()) {
-      navigate("/", { replace: true });
-    }
-  }, [navigate]);
+    // Allow Login/Signup page to be accessible even when already authenticated.
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {

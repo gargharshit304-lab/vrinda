@@ -12,6 +12,7 @@ import {
   Legend
 } from "recharts";
 import { Link, useNavigate } from "react-router-dom";
+import AdminContactMessages from "./AdminContactMessages";
 import { ADMIN_PRODUCTS_KEY, makeProductId, normalizeCatalogProduct } from "../data/productCatalog";
 import { apiRequest } from "../data/apiClient";
 import { fetchOrders as fetchAdminOrders } from "../data/orderApi";
@@ -31,6 +32,7 @@ const sections = [
   { key: "products", label: "Product Management", icon: "M21 8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8M8 6V4h8v2M3 12h18" },
   { key: "orders", label: "Pending Orders", icon: "M3 4h18v17H3zM8 2v4M16 2v4M7 11h10M7 15h6" },
   { key: "analytics", label: "Analytics", icon: "M4 20V10M10 20V4M16 20v-7M22 20v-11" },
+  { key: "contacts", label: "Contact Messages", icon: "M21 8v13H3V8M7 3h10l1 5H6l1-5z" },
   { key: "revenue", label: "Revenue Tracker", icon: "M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" }
 ];
 
@@ -87,7 +89,7 @@ const isCompletedOrder = (order) => {
 
 const isPendingOrder = (order) => {
   const status = getOrderStatus(order).toLowerCase();
-  return status === "pending" || status === "processing" || status === "packed" || status === "shipped";
+  return status === "pending" || status === "processing" || status === "packed" || status === "shipped" || status === "out for delivery";
 };
 
 const getOrderStatusValue = (order) => {
@@ -114,19 +116,19 @@ const getOrderStatusLabel = (order) => {
 
 const mapOrderStatusToApiValue = (status) => {
   const normalized = String(status || "").trim().toLowerCase();
-  if (normalized === "out for delivery") {
-    return "shipped";
-  }
   if (normalized === "pending") {
-    return "pending";
+    return "Pending";
   }
   if (normalized === "packed") {
-    return "packed";
+    return "Packed";
+  }
+  if (normalized === "out for delivery" || normalized === "shipped") {
+    return "Out for Delivery";
   }
   if (normalized === "delivered") {
-    return "delivered";
+    return "Delivered";
   }
-  return normalized;
+  return status;
 };
 
 const getOrderCustomerName = (order) => String(order?.user?.name || order?.shippingAddress?.fullName || "Customer");
@@ -242,15 +244,18 @@ const buildFallbackTrendSeries = (series, valueKey) => {
     ];
   }
 
-  return [
-    { date: "Mon", [valueKey]: 0 },
-    { date: "Tue", [valueKey]: 0 },
-    { date: "Wed", [valueKey]: 0 },
-    { date: "Thu", [valueKey]: 0 },
-    { date: "Fri", [valueKey]: 0 },
-    { date: "Sat", [valueKey]: 0 },
-    { date: "Sun", [valueKey]: 0 }
-  ];
+  // Create 7-day fallback with DD/M format (matches backend)
+  const fallbackDays = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const label = `${d.getDate()}/${d.getMonth() + 1}`;
+    fallbackDays.push({
+      date: label,
+      [valueKey]: 0
+    });
+  }
+  return fallbackDays;
 };
 
 export default function AdminPage() {
@@ -272,7 +277,9 @@ export default function AdminPage() {
     lowStock: [],
     revenueByDate: [],
     ordersByDate: [],
-    topProducts: []
+    topProducts: [],
+    revenueGrowth: 0,
+    ordersGrowth: 0
   });
   const [productStatus, setProductStatus] = useState("");
   const [orderStatusMsg, setOrderStatusMsg] = useState("");
@@ -336,12 +343,18 @@ export default function AdminPage() {
           lowStock: Array.isArray(data?.lowStock) ? data.lowStock : [],
           revenueByDate: Array.isArray(data?.revenueByDate) ? data.revenueByDate : [],
           ordersByDate: Array.isArray(data?.ordersByDate) ? data.ordersByDate : [],
-          topProducts: Array.isArray(data?.topProducts) ? data.topProducts : []
+          topProducts: Array.isArray(data?.topProducts) ? data.topProducts : [],
+          revenueGrowth: Number(data?.revenueGrowth) || 0,
+          ordersGrowth: Number(data?.ordersGrowth) || 0
         };
 
         console.log("Analytics Data:", normalizedData);
         console.log("Revenue Series Data:", normalizedData.revenueByDate);
         console.log("Orders Series Data:", normalizedData.ordersByDate);
+        console.log("Growth Data:", {
+          revenueGrowth: normalizedData.revenueGrowth,
+          ordersGrowth: normalizedData.ordersGrowth
+        });
 
         setAnalyticsData(normalizedData);
       } catch (error) {
@@ -467,18 +480,37 @@ export default function AdminPage() {
   const ordersSeries = useMemo(
     () => {
       const rawSeries = buildFallbackTrendSeries(analyticsData.ordersByDate, "count");
-      const transformedSeries = rawSeries.map((point) => ({
-        date: point.date,
-        orders: Number(point.count || 0)
-      }));
-      console.log("Orders Series (for BarChart):", transformedSeries);
-      return transformedSeries;
+      console.log("Orders Series (for BarChart):", rawSeries);
+      return rawSeries;
     },
     [analyticsData.ordersByDate]
   );
 
-  const revenueGrowth = useMemo(() => compareGrowth(revenueSeries, "revenue"), [revenueSeries]);
-  const ordersGrowth = useMemo(() => compareGrowth(ordersSeries, "orders"), [ordersSeries]);
+  const revenueGrowth = useMemo(() => {
+    const percentChange = Number(analyticsData.revenueGrowth) || 0;
+    if (percentChange === 0 && analyticsData.totalRevenue === 0) {
+      return null;
+    }
+    return {
+      currentValue: analyticsData.totalRevenue,
+      previousValue: analyticsData.totalRevenue / (1 + percentChange / 100) || 0,
+      delta: analyticsData.totalRevenue - (analyticsData.totalRevenue / (1 + percentChange / 100) || 0),
+      percent: percentChange
+    };
+  }, [analyticsData.revenueGrowth, analyticsData.totalRevenue]);
+
+  const ordersGrowth = useMemo(() => {
+    const percentChange = Number(analyticsData.ordersGrowth) || 0;
+    if (percentChange === 0 && analyticsData.totalOrders === 0) {
+      return null;
+    }
+    return {
+      currentValue: analyticsData.totalOrders,
+      previousValue: analyticsData.totalOrders / (1 + percentChange / 100) || 0,
+      delta: analyticsData.totalOrders - (analyticsData.totalOrders / (1 + percentChange / 100) || 0),
+      percent: percentChange
+    };
+  }, [analyticsData.ordersGrowth, analyticsData.totalOrders]);
 
   const productsSoldGrowth = useMemo(() => {
     const dailyUnits = buildDailyTotals(orders, (order) =>
@@ -689,7 +721,7 @@ export default function AdminPage() {
 
   const updateStatus = async (id, status) => {
     try {
-      await apiRequest(`/orders/${encodeURIComponent(id)}`, {
+      await apiRequest(`/orders/${encodeURIComponent(id)}/status`, {
         method: "PUT",
         auth: true,
         body: JSON.stringify({ status: mapOrderStatusToApiValue(status) })
@@ -1415,10 +1447,18 @@ export default function AdminPage() {
 
                   {/* Charts */}
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    {console.log("CHART DEBUG:", {
+                      revenueSeries,
+                      ordersSeries,
+                      revenueSeriesLength: revenueSeries?.length,
+                      orderSeriesLength: ordersSeries?.length,
+                      firstRevenuePoint: revenueSeries?.[0],
+                      firstOrderPoint: ordersSeries?.[0]
+                    })}
                     <div className="rounded-2xl border border-sage-200 bg-white p-4 shadow-soft">
                       <h4 className="text-sm font-extrabold text-sage-700">Revenue (daily)</h4>
                       <div style={{ height: 260 }} className="mt-3">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height={260}>
                           <LineChart data={revenueSeries}>
                             <defs>
                               <linearGradient id="revenueLineGradient" x1="0" y1="0" x2="1" y2="0">
@@ -1458,7 +1498,7 @@ export default function AdminPage() {
                     <div className="rounded-2xl border border-sage-200 bg-white p-4 shadow-soft">
                       <h4 className="text-sm font-extrabold text-sage-700">Orders (daily)</h4>
                       <div style={{ height: 260 }} className="mt-3">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height={260}>
                           <BarChart data={ordersSeries}>
                             <defs>
                               <linearGradient id="ordersBarGradient" x1="0" y1="0" x2="0" y2="1">
@@ -1481,7 +1521,7 @@ export default function AdminPage() {
                               labelStyle={{ color: "#166534", fontWeight: 800 }}
                               cursor={{ fill: "rgba(104, 211, 145, 0.1)" }}
                             />
-                            <Bar dataKey="orders" fill="url(#ordersBarGradient)" radius={[10, 10, 0, 0]} />
+                            <Bar dataKey="count" fill="url(#ordersBarGradient)" radius={[10, 10, 0, 0]} />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
@@ -1531,6 +1571,10 @@ export default function AdminPage() {
                 </div>
               )}
             </section>
+          )}
+
+          {activeSection === "contacts" && (
+            <AdminContactMessages />
           )}
 
           {activeSection === "revenue" && (

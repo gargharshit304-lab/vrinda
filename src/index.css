@@ -137,6 +137,14 @@
     background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0));
     animation: skeletonShimmer 1.2s ease-in-out infinite;
   }
+
+  .timeline-pop {
+    animation: timelinePop 420ms ease-out;
+  }
+
+  .timeline-step-current {
+    animation: timelineStepPulse 1.8s ease-in-out infinite;
+  }
 }
 
 @keyframes floatSoft {
@@ -234,5 +242,28 @@
 @keyframes skeletonShimmer {
   100% {
     transform: translateX(100%);
+  }
+}
+
+@keyframes timelinePop {
+  0% {
+    opacity: 0.7;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes timelineStepPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.14);
+  }
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
   }
 }
