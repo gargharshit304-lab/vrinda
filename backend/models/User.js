@@ -16,7 +16,26 @@ const userSchema = new mongoose.Schema(
     },
     passwordHash: {
       type: String,
-      required: true
+      default: null
+    },
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      default: null
+    },
+    authProvider: {
+      type: String,
+      enum: ["local", "google"],
+      default: "local"
+    },
+    emailVerified: {
+      type: Boolean,
+      default: false
+    },
+    isGoogleUser: {
+      type: Boolean,
+      default: false
     },
     role: {
       type: String,
@@ -32,6 +51,7 @@ userSchema.methods.toSafeObject = function toSafeObject() {
     id: this._id,
     name: this.name,
     email: this.email,
+    isGoogleUser: this.isGoogleUser,
     role: this.role
   };
 };

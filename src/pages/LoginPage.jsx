@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 import { apiRequest } from "../data/apiClient";
-import { getAuthToken, setAuthSession } from "../data/authStorage";
+import { setAuthSession } from "../data/authStorage";
 
 const slides = [
   "https://images.unsplash.com/photo-1608571423539-e951a5f2f25f?auto=format&fit=crop&w=1200&q=80",
@@ -13,6 +13,7 @@ const slides = [
 export default function LoginPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const backendBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
   const [tab, setTab] = useState("signin");
   const [slideIndex, setSlideIndex] = useState(0);
   const [signinStatus, setSigninStatus] = useState("");
@@ -60,6 +61,10 @@ export default function LoginPage() {
     if (mode === "signin") {
       setTab("signin");
     }
+    if (params.get("google") === "error") {
+      setSigninStatus("Google sign-in was not completed.");
+      showToast("error", "Google sign-in failed");
+    }
   }, [location.search]);
 
   useEffect(() => {
@@ -68,6 +73,30 @@ export default function LoginPage() {
       setSigninStatus(incomingMessage);
     }
   }, [location.state]);
+
+  useEffect(() => {
+    if (!location.hash) {
+      return;
+    }
+
+    const params = new URLSearchParams(location.hash.replace(/^#/, ""));
+    const token = params.get("token");
+    const userJson = params.get("user");
+
+    if (!token || !userJson) {
+      return;
+    }
+
+    try {
+      const user = JSON.parse(userJson);
+      setAuthSession({ token, user });
+      showToast("success", "Signed in with Google");
+      navigate(redirectTo, { replace: true });
+    } catch {
+      setSigninStatus("Google sign-in could not be completed.");
+      showToast("error", "Google sign-in failed");
+    }
+  }, [location.hash, navigate, redirectTo]);
 
   useEffect(() => {
     if (!toast.show) {
@@ -79,6 +108,10 @@ export default function LoginPage() {
 
   const showToast = (kind, text) => {
     setToast({ show: true, kind, text });
+  };
+
+  const handleGoogleLogin = () => {
+    window.location.href = `${backendBaseUrl}/auth/google`;
   };
 
   const handleSignup = async (event) => {
@@ -269,6 +302,18 @@ export default function LoginPage() {
               <button disabled={signinLoading} className="w-full rounded-full bg-gradient-to-r from-sage-700 to-sage-500 px-5 py-3 text-sm font-extrabold text-white transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70">
                 {signinLoading ? "Signing In..." : "Sign In"}
               </button>
+              <div className="flex items-center gap-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-sage-500">
+                <span className="h-px flex-1 bg-sage-200" />
+                <span>or</span>
+                <span className="h-px flex-1 bg-sage-200" />
+              </div>
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                className="w-full rounded-full border border-sage-200 bg-white px-5 py-3 text-sm font-extrabold text-sage-800 transition hover:-translate-y-0.5 hover:border-sage-300 hover:shadow-lg"
+              >
+                Continue with Google
+              </button>
               <p className="min-h-5 text-sm font-bold text-sage-700">{signinStatus}</p>
             </form>
           ) : (
@@ -330,6 +375,18 @@ export default function LoginPage() {
 
               <button disabled={signupLoading} className="w-full rounded-full bg-gradient-to-r from-sage-700 to-sage-500 px-5 py-3 text-sm font-extrabold text-white transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-70">
                 {signupLoading ? "Creating Account..." : "Create Account"}
+              </button>
+              <div className="flex items-center gap-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-sage-500">
+                <span className="h-px flex-1 bg-sage-200" />
+                <span>or</span>
+                <span className="h-px flex-1 bg-sage-200" />
+              </div>
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                className="w-full rounded-full border border-sage-200 bg-white px-5 py-3 text-sm font-extrabold text-sage-800 transition hover:-translate-y-0.5 hover:border-sage-300 hover:shadow-lg"
+              >
+                Continue with Google
               </button>
               <p className="min-h-5 text-sm font-bold text-sage-700">{signupStatus}</p>
             </form>

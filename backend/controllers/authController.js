@@ -97,6 +97,12 @@ export const loginUser = async (req, res, next) => {
       throw error;
     }
 
+    if (!user.passwordHash) {
+      const error = new Error("Please continue with Google to sign in to this account");
+      error.statusCode = 401;
+      throw error;
+    }
+
     const validPassword = await bcrypt.compare(password, user.passwordHash);
 
     if (!validPassword) {
@@ -115,4 +121,91 @@ export const loginUser = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+export const upsertGoogleUser = async (profile) => {
+  const email = profile?.emails?.[0]?.value?.trim().toLowerCase();
+  const name = profile?.displayName?.trim() || email?.split("@")[0] || "Google User";
+
+  if (!email) {
+    const error = new Error("Google account did not provide an email address");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const user = await User.findOne({ email });
+
+  if (user) {
+    let changed = false;
+
+    if (!user.googleId) {
+      user.googleId = profile.id;
+      changed = true;
+    }
+
+    if (!user.authProvider || user.authProvider !== "google") {
+      user.authProvider = "google";
+      changed = true;
+    }
+
+    if (!user.isGoogleUser) {
+      user.isGoogleUser = true;
+      changed = true;
+    }
+
+    if (!user.emailVerified) {
+      user.emailVerified = true;
+      changed = true;
+    }
+
+    if (!user.name && name) {
+      user.name = name;
+      changed = true;
+    }
+
+    if (changed) {
+      await user.save();
+    }
+
+    return user;
+  }
+
+  return User.create({
+    name,
+    email,
+    googleId: profile.id,
+    authProvider: "google",
+    isGoogleUser: true,
+    emailVerified: true,
+    role: "user"
+  });
+};
+
+export const googleLoginComplete = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      const error = new Error("Unauthorized");
+      error.statusCode = 401;
+      throw error;
+    }
+
+    const token = signToken(req.user._id.toString(), req.user.role);
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const redirectUrl = new URL("/login", frontendUrl);
+    const payload = new URLSearchParams({
+      token,
+      user: JSON.stringify(req.user.toSafeObject())
+    });
+
+    redirectUrl.hash = payload.toString();
+    res.redirect(redirectUrl.toString());
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const googleOAuthUnavailable = (_req, res) => {
+  res.status(503).json({
+    message: "Google OAuth is not configured on the server"
+  });
 };
