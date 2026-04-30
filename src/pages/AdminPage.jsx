@@ -289,6 +289,7 @@ export default function AdminPage() {
   const [additionalImageFiles, setAdditionalImageFiles] = useState([]);
   const [isUploadingProduct, setIsUploadingProduct] = useState(false);
   const [featureInput, setFeatureInput] = useState("");
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
 
   useEffect(() => {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -720,18 +721,58 @@ export default function AdminPage() {
   };
 
   const updateStatus = async (id, status) => {
+    const orderId = String(id || "");
+    if (!orderId) {
+      setOrderStatusMsg("Order ID is missing.");
+      return;
+    }
+
+    // Prevent multiple simultaneous requests
+    if (updatingOrderId === orderId) {
+      return;
+    }
+
+    console.log("Updating order:", orderId, "status:", status);
+
+    setUpdatingOrderId(orderId);
+    setOrderStatusMsg("");
+
     try {
-      await apiRequest(`/orders/${encodeURIComponent(id)}/status`, {
+      const mappedStatus = mapOrderStatusToApiValue(status);
+      console.log("Mapped status value:", mappedStatus);
+
+      const response = await apiRequest(`/orders/${encodeURIComponent(orderId)}/status`, {
         method: "PUT",
         auth: true,
-        body: JSON.stringify({ status: mapOrderStatusToApiValue(status) })
+        body: JSON.stringify({ status: mappedStatus })
       });
 
-      const data = await fetchAdminOrders();
-      setOrders(data);
-      setOrderStatusMsg("Order status updated.");
+      console.log("Status update response:", response);
+
+      // Update state locally for immediate UI feedback
+      const updatedOrders = orders.map((order) =>
+        (order._id === orderId || order.id === orderId) ? { ...order, status: mappedStatus } : order
+      );
+      setOrders(updatedOrders);
+      setOrderStatusMsg("Order status updated successfully!");
+
+      // Refresh orders from backend after a short delay
+      setTimeout(async () => {
+        try {
+          const data = await fetchAdminOrders();
+          setOrders(data);
+          console.log("Orders refreshed from backend");
+        } catch (refreshError) {
+          console.error("Failed to refresh orders:", refreshError);
+        }
+      }, 500);
     } catch (error) {
-      setOrderStatusMsg(error?.message || "Failed to update order status.");
+      console.error("Status update error:", error);
+      const errorMsg = error?.message || "Failed to update order status.";
+      setOrderStatusMsg(errorMsg);
+      showToast(errorMsg, "error");
+    } finally {
+      setUpdatingOrderId(null);
     }
   };
 
@@ -1282,38 +1323,38 @@ export default function AdminPage() {
                                 <button
                                   type="button"
                                   onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Packed")}
-                                  disabled={!isPending}
+                                  disabled={!isPending || updatingOrderId === (order._id || order.id || order.orderNumber)}
                                   className={`rounded-full px-3 py-2 text-xs font-extrabold text-white transition ${
-                                    isPending
-                                      ? "bg-blue-600 hover:bg-blue-700"
+                                    isPending && updatingOrderId !== (order._id || order.id || order.orderNumber)
+                                      ? "bg-blue-600 hover:bg-blue-700 cursor-pointer"
                                       : "cursor-not-allowed bg-gray-300 text-gray-600"
                                   }`}
                                 >
-                                  Mark Packed
+                                  {updatingOrderId === (order._id || order.id || order.orderNumber) ? "Updating..." : "Mark Packed"}
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Out for Delivery")}
-                                  disabled={!isPacked}
+                                  disabled={!isPacked || updatingOrderId === (order._id || order.id || order.orderNumber)}
                                   className={`rounded-full px-3 py-2 text-xs font-extrabold text-white transition ${
-                                    isPacked
-                                      ? "bg-orange-500 hover:bg-orange-600"
+                                    isPacked && updatingOrderId !== (order._id || order.id || order.orderNumber)
+                                      ? "bg-orange-500 hover:bg-orange-600 cursor-pointer"
                                       : "cursor-not-allowed bg-gray-300 text-gray-600"
                                   }`}
                                 >
-                                  Out for Delivery
+                                  {updatingOrderId === (order._id || order.id || order.orderNumber) ? "Updating..." : "Out for Delivery"}
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Delivered")}
-                                  disabled={!isOutForDelivery}
+                                  disabled={!isOutForDelivery || updatingOrderId === (order._id || order.id || order.orderNumber)}
                                   className={`rounded-full px-3 py-2 text-xs font-extrabold text-white transition ${
-                                    isOutForDelivery
-                                      ? "bg-emerald-600 hover:bg-emerald-700"
+                                    isOutForDelivery && updatingOrderId !== (order._id || order.id || order.orderNumber)
+                                      ? "bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
                                       : "cursor-not-allowed bg-gray-300 text-gray-600"
                                   }`}
                                 >
-                                  Delivered
+                                  {updatingOrderId === (order._id || order.id || order.orderNumber) ? "Updating..." : "Delivered"}
                                 </button>
                                 {isDelivered ? (
                                   <span className="rounded-full bg-gray-200 px-3 py-2 text-xs font-extrabold text-gray-600">

@@ -37,48 +37,18 @@ export const getSimilarProducts = async (req, res, next) => {
       throw error;
     }
 
-    const category = String(currentProduct.category || "").trim();
-    const type = String(currentProduct.type || "").trim();
-    const currentPrice = Number(currentProduct.price) || 0;
-
-    const matchConditions = [{ category, _id: { $ne: currentProduct._id } }];
-
-    if (type) {
-      matchConditions.push({ type, _id: { $ne: currentProduct._id } });
-    }
-
-    const candidates = await Product.find({
-      status: "active",
+    // Find similar products in the same category with stock > 0
+    const similarProducts = await Product.find({
+      category: currentProduct.category,
       _id: { $ne: currentProduct._id },
-      $or: matchConditions
-    }).sort({ createdAt: -1 }).limit(12);
+      stock: { $gt: 0 },
+      status: "active"
+    })
+      .select("name price image category")
+      .limit(10)
+      .sort({ createdAt: -1 });
 
-    const ranked = candidates
-      .map((product) => ({
-        product,
-        score: [product.category === currentProduct.category ? 2 : 0, type && product.type === type ? 2 : 0]
-          .reduce((sum, value) => sum + value, 0),
-        priceGap: Math.abs((Number(product.price) || 0) - currentPrice)
-      }))
-      .sort((a, b) => b.score - a.score || a.priceGap - b.priceGap || String(a.product.name).localeCompare(String(b.product.name)))
-      .map((entry) => entry.product)
-      .slice(0, 6);
-
-    if (ranked.length > 0) {
-      return res.status(200).json(ranked);
-    }
-
-    const fallback = await Product.aggregate([
-      {
-        $match: {
-          status: "active",
-          _id: { $ne: currentProduct._id }
-        }
-      },
-      { $sample: { size: 6 } }
-    ]);
-
-    return res.status(200).json(fallback);
+    res.status(200).json(similarProducts);
   } catch (error) {
     next(error);
   }

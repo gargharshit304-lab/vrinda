@@ -309,11 +309,15 @@ export default function OrderDetailPage() {
                     </div>
 
                     <div key={timelineKey} className="mt-6">
-                      <div className="relative px-1 pb-10 pt-2 sm:px-3">
+                      <div className="relative overflow-hidden px-1 pb-10 pt-2 sm:px-3">
                         <div className="absolute left-6 right-6 top-8 h-1 rounded-full bg-slate-200/90 sm:left-8 sm:right-8" />
                         <div
                           className="absolute left-6 top-8 h-1 rounded-full bg-gradient-to-r from-emerald-400 via-green-500 to-emerald-600 shadow-[0_0_18px_rgba(34,197,94,0.24)] transition-[width] duration-700 ease-in-out sm:left-8"
-                          style={{ width: `${progress}%` }}
+                          style={{ 
+                            width: `${Math.min(progress, 100)}%`,
+                            maxWidth: "100%",
+                            boxSizing: "border-box"
+                          }}
                         />
 
                         <div className="relative z-10 grid grid-cols-4 gap-3 sm:gap-4">

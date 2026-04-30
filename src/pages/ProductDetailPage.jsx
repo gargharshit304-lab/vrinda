@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 import { fetchProductById, fetchProducts, fetchSimilarProducts } from "../data/productApi";
@@ -64,6 +64,17 @@ export default function ProductDetailPage() {
   const [clickedRating, setClickedRating] = useState(0);
   const [similarProducts, setSimilarProducts] = useState([]);
   const isAdminUser = isAdminAccount();
+  const scrollContainerRef = useRef(null);
+
+  const scrollCarousel = (direction) => {
+    if (!scrollContainerRef.current) return;
+    const container = scrollContainerRef.current;
+    const scrollAmount = 280; // product width + gap
+    container.scrollBy({
+      left: direction === "left" ? -scrollAmount : scrollAmount,
+      behavior: "smooth"
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -421,42 +432,80 @@ export default function ProductDetailPage() {
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-sage-700/70">You may also like</p>
             </div>
 
-            <div className="-mx-1 flex snap-x gap-4 overflow-x-auto px-1 pb-1 lg:mx-0 lg:grid lg:grid-cols-4 lg:overflow-visible lg:px-0">
-              {fallbackSimilarProducts.map((item) => {
-                const itemPrice = item.onSale && item.salePercent > 0
-                  ? Math.max(1, Math.round(item.price * (1 - item.salePercent / 100)))
-                  : item.price;
+            <div className="group relative">
+              {/* Scroll Container */}
+              <div
+                ref={scrollContainerRef}
+                className="scrollbar-hide flex gap-5 overflow-x-auto scroll-smooth"
+              >
+                {fallbackSimilarProducts.map((item) => {
+                  const itemPrice = item.onSale && item.salePercent > 0
+                    ? Math.max(1, Math.round(item.price * (1 - item.salePercent / 100)))
+                    : item.price;
 
-                return (
-                  <article
-                    key={item.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate(`/product/${item.id}`)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        navigate(`/product/${item.id}`);
-                      }
-                    }}
-                    className="group min-w-[240px] snap-start overflow-hidden rounded-2xl border border-sage-100/90 bg-[#faf7f0]/92 transition duration-300 hover:-translate-y-1 hover:shadow-[0_18px_30px_rgba(31,61,43,0.14)] lg:min-w-0"
-                  >
-                    <div className="h-36 overflow-hidden">
-                      <img
-                        src={item.images?.[0] || item.mainImageDataUrl || item.imageDataUrl}
-                        alt={item.name}
-                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                      />
-                    </div>
-                    <div className="space-y-1 p-3">
-                      <p className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-sage-700/75">{item.category}</p>
-                      <h3 className="line-clamp-1 text-sm font-extrabold text-sage-800">{item.name}</h3>
-                      <p className="line-clamp-2 text-xs text-sage-600">{item.tagline || item.copy}</p>
-                      <p className="pt-1 text-sm font-extrabold text-sage-800">Rs {itemPrice}</p>
-                    </div>
-                  </article>
-                );
-              })}
+                  return (
+                    <article
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate(`/product/${item.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate(`/product/${item.id}`);
+                        }
+                      }}
+                      className="group/card relative min-w-[260px] flex-shrink-0 overflow-hidden rounded-2xl border border-sage-100/90 bg-[#faf7f0]/92 transition-all duration-300 hover:shadow-lg hover:shadow-sage-800/15"
+                    >
+                      {/* Image Container */}
+                      <div className="h-40 overflow-hidden bg-white/50">
+                        <img
+                          src={item.images?.[0] || item.mainImageDataUrl || item.imageDataUrl}
+                          alt={item.name}
+                          className="h-full w-full object-cover transition-transform duration-500 group-hover/card:scale-110"
+                        />
+                      </div>
+
+                      {/* Content Container */}
+                      <div className="space-y-2 p-4">
+                        <p className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-sage-700/75">{item.category}</p>
+                        <h3 className="line-clamp-1 text-sm font-extrabold text-sage-800">{item.name}</h3>
+                        <p className="line-clamp-2 text-xs text-sage-600">{item.tagline || item.copy}</p>
+                        <p className="pt-1 text-sm font-extrabold text-sage-800">Rs {itemPrice}</p>
+                      </div>
+
+                      {/* Hover Overlay */}
+                      <div className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover/card:opacity-100">
+                        <div className="absolute inset-0 bg-gradient-to-t from-sage-900/20 to-transparent" />
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+
+              {/* Left Scroll Arrow */}
+              <button
+                type="button"
+                onClick={() => scrollCarousel("left")}
+                className="absolute -left-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/90 p-2.5 shadow-lg transition-all duration-300 hover:bg-white hover:shadow-xl hover:scale-110 group-hover:opacity-100 opacity-0 hover:-left-3"
+                aria-label="Scroll left"
+              >
+                <svg className="h-5 w-5 text-sage-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+
+              {/* Right Scroll Arrow */}
+              <button
+                type="button"
+                onClick={() => scrollCarousel("right")}
+                className="absolute -right-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/90 p-2.5 shadow-lg transition-all duration-300 hover:bg-white hover:shadow-xl hover:scale-110 group-hover:opacity-100 opacity-0 hover:-right-3"
+                aria-label="Scroll right"
+              >
+                <svg className="h-5 w-5 text-sage-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
           </section>
         ) : (
@@ -476,16 +525,30 @@ export default function ProductDetailPage() {
             </div>
           </div>
 
-          <div className="mt-4 space-y-3">
-            {reviews.map((review) => (
-              <article key={review.id} className="rounded-2xl border border-sage-100/90 bg-[#faf7f0]/90 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-extrabold text-sage-800">{review.name}</p>
-                  <p className="text-sm text-amber-500">{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</p>
-                </div>
-                <p className="mt-2 text-sm leading-relaxed text-sage-700">{review.comment}</p>
-              </article>
-            ))}
+          {/* Scrollable Reviews Container */}
+          <div className="relative mt-4">
+            {/* Top Fade Overlay */}
+            {reviews.length > 3 && (
+              <div className="pointer-events-none absolute left-0 right-0 top-0 z-10 h-12 bg-gradient-to-b from-white/65 to-transparent" />
+            )}
+
+            {/* Reviews List */}
+            <div className="scrollbar-hide space-y-3 overflow-y-auto scroll-smooth" style={{ maxHeight: "350px" }}>
+              {reviews.map((review) => (
+                <article key={review.id} className="rounded-2xl border border-sage-100/90 bg-[#faf7f0]/90 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-extrabold text-sage-800">{review.name}</p>
+                    <p className="text-sm text-amber-500">{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</p>
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-sage-700">{review.comment}</p>
+                </article>
+              ))}
+            </div>
+
+            {/* Bottom Fade Overlay */}
+            {reviews.length > 3 && (
+              <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-12 bg-gradient-to-t from-white/65 to-transparent" />
+            )}
           </div>
 
           <form onSubmit={handleReviewSubmit} className="mt-5 rounded-2xl border border-sage-100/90 bg-white/80 p-4">

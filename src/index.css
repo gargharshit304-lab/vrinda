@@ -145,6 +145,15 @@
   .timeline-step-current {
     animation: timelineStepPulse 1.8s ease-in-out infinite;
   }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+  }
 }
 
 @keyframes floatSoft {
