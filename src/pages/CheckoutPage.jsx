@@ -79,6 +79,13 @@ export default function CheckoutPage() {
 
   const validateStep = (step) => {
     const nextErrors = {};
+
+    // Check cart is not empty for all steps
+    if (cartItems.length === 0) {
+      nextErrors.cart = "Your cart is empty. Please add items before checkout.";
+      return nextErrors;
+    }
+
     if (step === 1) {
       if (!formData.fullName.trim()) nextErrors.fullName = "Full name is required.";
       if (!formData.phoneNumber.trim()) nextErrors.phoneNumber = "Phone number is required.";
@@ -99,7 +106,6 @@ export default function CheckoutPage() {
       }
     }
 
-    if (cartItems.length === 0) nextErrors.cart = "Your cart is empty.";
     return nextErrors;
   };
 
@@ -132,6 +138,13 @@ export default function CheckoutPage() {
       return;
     }
 
+    // Final validation: check cart is not empty
+    if (!cartItems || cartItems.length === 0) {
+      setErrors({ cart: "Your cart is empty. Please add items before checkout." });
+      return;
+    }
+
+    // Check authentication
     if (!getAuthToken()) {
       setErrors({ cart: "Please sign in to place your order." });
       navigate("/login");
@@ -141,12 +154,14 @@ export default function CheckoutPage() {
     try {
       setIsSubmitting(true);
 
-      const apiOrder = await createOrderRequest({
+      console.log("[CheckoutPage] Submitting order with cart items:", cartItems);
+
+      // Build order payload with correct structure
+      const orderPayload = {
         items: cartItems.map((item) => ({
-          product: item.productId || item.id,
-          name: item.name,
-          price: Number(item.price || 0),
-          quantity: Number(item.quantity || 0)
+          productId: item.productId || item.id,
+          quantity: Number(item.quantity || 1),
+          price: Number(item.price || 0)
         })),
         shippingAddress: {
           fullName: formData.fullName,
@@ -156,7 +171,13 @@ export default function CheckoutPage() {
           pincode: formData.pincode
         },
         paymentMethod: formData.paymentMethod === "upi" ? "FAKE_UPI" : "COD"
-      });
+      };
+
+      console.log("[CheckoutPage] Order payload being sent:", JSON.stringify(orderPayload, null, 2));
+
+      const apiOrder = await createOrderRequest(orderPayload);
+
+      console.log("[CheckoutPage] Order created successfully:", apiOrder);
 
       const orderData = {
         id: apiOrder?.orderNumber || apiOrder?._id || `VR-${Date.now().toString().slice(-8)}`,
@@ -180,6 +201,7 @@ export default function CheckoutPage() {
       setErrors({});
       navigate("/order-confirmation", { state: { order: orderData } });
     } catch (error) {
+      console.log("[CheckoutPage] Order submission error:", error.message);
       setErrors({ cart: error.message || "Unable to place order right now." });
     } finally {
       setIsSubmitting(false);

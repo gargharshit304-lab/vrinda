@@ -99,6 +99,28 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0
+    },
+    inventoryUpdatedAt: {
+      type: Date,
+      default: null
+    },
+    inventoryUpdateDetails: {
+      updatedItems: [
+        {
+          productId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Product"
+          },
+          name: String,
+          quantity: Number,
+          newStock: Number,
+          newSoldCount: Number
+        }
+      ],
+      errors: {
+        type: [String],
+        default: []
+      }
     }
   },
   { timestamps: true }

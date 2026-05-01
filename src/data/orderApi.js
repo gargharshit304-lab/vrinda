@@ -1,14 +1,15 @@
 import { apiRequest } from "./apiClient";
 
 export const createOrderRequest = async ({ items, shippingAddress, paymentMethod }) => {
+  console.log("[orderApi] Creating order with payload:", { items, shippingAddress, paymentMethod });
   return apiRequest("/orders", {
     method: "POST",
     auth: true,
-    body: JSON.stringify({
+    body: {
       items,
       shippingAddress,
       paymentMethod
-    })
+    }
   });
 };
 

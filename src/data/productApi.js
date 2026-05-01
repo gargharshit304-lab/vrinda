@@ -1,4 +1,5 @@
 import { apiRequest } from "./apiClient";
+import { getAuthToken } from "./authStorage";
 import { ADMIN_PRODUCTS_KEY, normalizeCatalogProduct } from "./productCatalog";
 
 const readStoredProducts = () => {
@@ -73,9 +74,37 @@ export const updateProductStock = async (productId, quantity) => {
     throw new Error("Quantity must be a non-zero number");
   }
 
-  return apiRequest(`/products/${encodeURIComponent(productId)}/stock`, {
+  const token = getAuthToken();
+
+  if (!token) {
+    throw new Error("Unauthorized: token missing");
+  }
+
+  const response = await fetch(`/api/products/${encodeURIComponent(productId)}/stock`, {
     method: "PATCH",
-    auth: true,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
     body: JSON.stringify({ quantity: numQuantity })
   });
+
+  let data = null;
+  const text = await response.text();
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: text };
+    }
+  }
+
+  if (!response.ok) {
+    const error = new Error(data?.message || "Failed to update stock");
+    error.status = response.status;
+    throw error;
+  }
+
+  return data;
 };

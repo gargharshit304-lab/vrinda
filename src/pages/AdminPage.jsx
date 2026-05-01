@@ -835,6 +835,31 @@ export default function AdminPage() {
           console.error("Failed to refresh orders:", refreshError);
         }
       }, 500);
+      // If order is marked as Delivered, also refresh inventory
+      if (mapOrderStatusToApiValue(status) === "Delivered") {
+        console.log("[AdminPage] Order marked as Delivered. Refreshing inventory...");
+        setTimeout(async () => {
+          try {
+            // Fetch latest products from backend to get updated inventory
+            const response = await apiRequest("/products", {
+              method: "GET",
+              auth: true
+            });
+
+            if (Array.isArray(response)) {
+              console.log("[AdminPage] Inventory refreshed:", response.length, "products loaded");
+              const normalizedProducts = response
+                .map(normalizeCatalogProduct)
+                .filter(Boolean);
+              setProducts(normalizedProducts);
+              showToast("Inventory updated after delivery", "success");
+            }
+          } catch (inventoryError) {
+            console.error("[AdminPage] Failed to refresh inventory:", inventoryError);
+            // Don't show error toast - inventory refresh is not critical
+          }
+        }, 1000);
+      }
     } catch (error) {
       console.error("Status update error:", error);
       const errorMsg = error?.message || "Failed to update order status.";

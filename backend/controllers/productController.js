@@ -150,30 +150,63 @@ export const deleteProduct = async (req, res, next) => {
 export const updateProductStock = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { quantity } = req.body;
+    const quantity = Number(req.body?.quantity);
 
-    if (typeof quantity !== "number" || !Number.isFinite(quantity) || quantity === 0) {
+    if (isDevelopment) {
+      // eslint-disable-next-line no-console
+      console.log("[product/stock] request", { id, body: req.body, quantity });
+    }
+
+    if (!Number.isFinite(quantity) || quantity === 0) {
       const error = new Error("quantity must be a non-zero number");
       error.statusCode = 400;
       throw error;
     }
 
-    const product = await Product.findById(id);
+    const product = await Product.findById(id).select("stock sold name");
     if (!product) {
       const error = new Error("Product not found");
       error.statusCode = 404;
       throw error;
     }
 
-    product.stock = Math.max(0, Number(product.stock || 0) + quantity);
+    const updatedProduct = await Product.findByIdAndUpdate(
+      id,
+      [
+        {
+          $set: {
+            stock: {
+              $max: [0, { $add: [{ $ifNull: ["$stock", 0] }, quantity] }]
+            }
+          }
+        }
+      ],
+      { new: true }
+    );
 
-    const updatedProduct = await product.save();
+    if (isDevelopment) {
+      // eslint-disable-next-line no-console
+      console.log("[product/stock] updated", {
+        id,
+        name: updatedProduct?.name,
+        previousStock: product.stock,
+        nextStock: updatedProduct?.stock,
+        quantity
+      });
+    }
 
     res.status(200).json({
       message: "Stock updated successfully",
       product: updatedProduct
     });
   } catch (error) {
+    if (isDevelopment) {
+      // eslint-disable-next-line no-console
+      console.error("[product/stock] error", {
+        message: error?.message,
+        statusCode: error?.statusCode || 500
+      });
+    }
     next(error);
   }
 };
