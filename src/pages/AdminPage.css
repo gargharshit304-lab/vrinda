@@ -1,0 +1,31 @@
+/* Scrollable Orders Table Styles */
+.orders-container {
+  max-height: 500px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.orders-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.orders-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.orders-container::-webkit-scrollbar-thumb {
+  background: #d1e3d6;
+  border-radius: 4px;
+}
+
+.orders-container::-webkit-scrollbar-thumb:hover {
+  background: #a8d5ba;
+}
+
+.orders-table-head {
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}

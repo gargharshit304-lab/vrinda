@@ -146,3 +146,34 @@ export const deleteProduct = async (req, res, next) => {
     next(error);
   }
 };
+
+export const updateProductStock = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { quantity } = req.body;
+
+    if (typeof quantity !== "number" || !Number.isFinite(quantity) || quantity === 0) {
+      const error = new Error("quantity must be a non-zero number");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const product = await Product.findById(id);
+    if (!product) {
+      const error = new Error("Product not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    product.stock = Math.max(0, Number(product.stock || 0) + quantity);
+
+    const updatedProduct = await product.save();
+
+    res.status(200).json({
+      message: "Stock updated successfully",
+      product: updatedProduct
+    });
+  } catch (error) {
+    next(error);
+  }
+};

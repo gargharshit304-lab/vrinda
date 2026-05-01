@@ -224,7 +224,7 @@ export const getOrderById = async (req, res, next) => {
 export const updateOrderStatus = async (req, res, next) => {
   try {
     const { status, orderStatus } = req.body;
-    const order = await Order.findById(req.params.id);
+    const order = await Order.findById(req.params.id).populate("items.product");
 
     if (!order) {
       const error = new Error("Order not found");
@@ -240,9 +240,35 @@ export const updateOrderStatus = async (req, res, next) => {
       throw error;
     }
 
+    const previousStatus = order.status;
     order.status = nextStatus.status;
     order.orderStatus = nextStatus.orderStatus;
-  applyStatusTimestamp(order, nextStatus.status);
+    applyStatusTimestamp(order, nextStatus.status);
+
+    // Sync inventory when order is delivered
+    if (nextStatus.status === "Delivered" && previousStatus !== "Delivered") {
+      for (const item of order.items) {
+        if (!item.product) {
+          continue;
+        }
+
+        const product = await Product.findById(item.product._id);
+
+        if (product) {
+          const quantity = Number(item.quantity) || 0;
+
+          // Decrease stock (ensure it doesn't go below 0)
+          const newStock = Math.max(0, Number(product.stock || 0) - quantity);
+          product.stock = newStock;
+
+          // Increase sold count
+          product.sold = (Number(product.sold) || 0) + quantity;
+
+          await product.save();
+        }
+      }
+    }
+
     await order.save();
 
     const populatedOrder = await Order.findById(order._id)

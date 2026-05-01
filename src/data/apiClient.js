@@ -22,12 +22,19 @@ export const apiRequest = async (path, options = {}) => {
   const method = String(rest.method || "GET").toUpperCase();
   const isFormData = typeof FormData !== "undefined" && rest.body instanceof FormData;
 
+  // Convert body to JSON string if it's an object and not FormData
+  let body = rest.body;
+  if (body && typeof body === "object" && !isFormData) {
+    body = JSON.stringify(body);
+  }
+
   // eslint-disable-next-line no-console
   console.log("[api/request]", {
     method: rest.method || "GET",
     url,
     auth,
-    isFormData
+    isFormData,
+    bodyType: typeof rest.body
   });
 
   let response;
@@ -36,6 +43,7 @@ export const apiRequest = async (path, options = {}) => {
     response = await fetch(url, {
       ...rest,
       method,
+      body,
       cache: method === "GET" ? "no-store" : rest.cache,
       headers: {
         ...(!isFormData ? { "Content-Type": "application/json" } : {}),

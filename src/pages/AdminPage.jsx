@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { Link, useNavigate } from "react-router-dom";
 import AdminContactMessages from "./AdminContactMessages";
+import AdminInventory from "./AdminInventory";
 import { ADMIN_PRODUCTS_KEY, makeProductId, normalizeCatalogProduct } from "../data/productCatalog";
 import { apiRequest } from "../data/apiClient";
 import { fetchOrders as fetchAdminOrders } from "../data/orderApi";
@@ -30,6 +31,7 @@ const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
 const sections = [
   { key: "overview", label: "Overview", icon: "M3 12l9-8 9 8M5 10v10h14V10" },
   { key: "products", label: "Product Management", icon: "M21 8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8M8 6V4h8v2M3 12h18" },
+  { key: "inventory", label: "Inventory", icon: "M9 3H5a2 2 0 0 0-2 2v4h4V3zm11 0h-4v4h4V3zM9 11H5v4h4v-4zm11 0h-4v4h4v-4zM9 19H5a2 2 0 0 0 2 2h2v-2zm11 0h-4v2h2a2 2 0 0 0 2-2z" },
   { key: "orders", label: "Pending Orders", icon: "M3 4h18v17H3zM8 2v4M16 2v4M7 11h10M7 15h6" },
   { key: "analytics", label: "Analytics", icon: "M4 20V10M10 20V4M16 20v-7M22 20v-11" },
   { key: "contacts", label: "Contact Messages", icon: "M21 8v13H3V8M7 3h10l1 5H6l1-5z" },
@@ -270,6 +272,13 @@ export default function AdminPage() {
       .filter(Boolean)
   );
   const [orders, setOrders] = useState([]);
+  const [filters, setFilters] = useState({
+    search: "",
+    status: "All",
+    date: "All",
+    sort: "Newest"
+  });
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [analyticsData, setAnalyticsData] = useState({
     totalOrders: 0,
     totalRevenue: 0,
@@ -367,6 +376,14 @@ export default function AdminPage() {
     loadAnalytics();
   }, [analyticsRange]);
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(filters.search.trim().toLowerCase());
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [filters.search]);
+
   const [productForm, setProductForm] = useState({
     name: "",
     category: "Soaps",
@@ -458,6 +475,58 @@ export default function AdminPage() {
   }, [products, soldByProduct]);
 
   const pendingOrders = orders.filter((order) => isPendingOrder(order)).length;
+
+  const filteredOrders = useMemo(() => {
+    const now = new Date();
+
+    const matchesDate = (orderDate) => {
+      if (filters.date === "All") {
+        return true;
+      }
+
+      const createdDate = new Date(orderDate);
+      if (Number.isNaN(createdDate.getTime())) {
+        return false;
+      }
+
+      if (filters.date === "Today") {
+        return createdDate.toDateString() === now.toDateString();
+      }
+
+      const diffMs = now.getTime() - createdDate.getTime();
+      const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+      if (filters.date === "Last 7 days") {
+        return diffDays <= 7;
+      }
+
+      if (filters.date === "Last 30 days") {
+        return diffDays <= 30;
+      }
+
+      return true;
+    };
+
+    const rows = orders.filter((order) => {
+      const orderId = String(order?._id || order?.id || order?.orderNumber || "").toLowerCase();
+      const customer = getOrderCustomerName(order).toLowerCase();
+      const statusLabel = getOrderStatusLabel(order);
+      const createdAt = order?.createdAt || order?.created || order?.updatedAt;
+
+      const matchesSearch = !debouncedSearch || orderId.includes(debouncedSearch) || customer.includes(debouncedSearch);
+      const matchesStatus = filters.status === "All" || statusLabel === filters.status;
+
+      return matchesSearch && matchesStatus && matchesDate(createdAt);
+    });
+
+    rows.sort((a, b) => {
+      const aTime = new Date(a?.createdAt || a?.created || a?.updatedAt || 0).getTime() || 0;
+      const bTime = new Date(b?.createdAt || b?.created || b?.updatedAt || 0).getTime() || 0;
+      return filters.sort === "Oldest" ? aTime - bTime : bTime - aTime;
+    });
+
+    return rows;
+  }, [orders, filters.status, filters.date, filters.sort, debouncedSearch]);
 
   const totalOrders = analyticsData.totalOrders || orders.length;
   const totalRevenue = analyticsData.totalRevenue || revenueStats.completedRevenue || 0;
@@ -1268,12 +1337,68 @@ export default function AdminPage() {
             </section>
           )}
 
+          {activeSection === "inventory" && <AdminInventory products={products} />}
+
           {activeSection === "orders" && (
             <section className="glass-card p-5">
               <h3 className="font-display text-4xl font-semibold text-sage-800">Pending Orders</h3>
-              <div className="mt-3 overflow-auto rounded-xl border border-sage-200 bg-white/80">
+              <div className="mt-3 grid gap-3 rounded-xl border border-sage-200/80 bg-white/70 p-3 md:grid-cols-2 lg:grid-cols-4">
+                <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
+                  Search
+                  <input
+                    type="text"
+                    value={filters.search}
+                    onChange={(event) => setFilters((old) => ({ ...old, search: event.target.value }))}
+                    placeholder="Order ID / Customer"
+                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
+                  />
+                </label>
+
+                <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
+                  Status
+                  <select
+                    value={filters.status}
+                    onChange={(event) => setFilters((old) => ({ ...old, status: event.target.value }))}
+                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
+                  >
+                    <option>All</option>
+                    <option>Pending</option>
+                    <option>Packed</option>
+                    <option>Out for Delivery</option>
+                    <option>Delivered</option>
+                  </select>
+                </label>
+
+                <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
+                  Date
+                  <select
+                    value={filters.date}
+                    onChange={(event) => setFilters((old) => ({ ...old, date: event.target.value }))}
+                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
+                  >
+                    <option>All</option>
+                    <option>Today</option>
+                    <option>Last 7 days</option>
+                    <option>Last 30 days</option>
+                  </select>
+                </label>
+
+                <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
+                  Sort
+                  <select
+                    value={filters.sort}
+                    onChange={(event) => setFilters((old) => ({ ...old, sort: event.target.value }))}
+                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
+                  >
+                    <option>Newest</option>
+                    <option>Oldest</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="orders-container mt-3 rounded-xl border border-sage-200 bg-white/80">
                 <table className="min-w-[680px] w-full text-left text-sm">
-                  <thead className="text-xs uppercase tracking-wider text-sage-600">
+                  <thead className="orders-table-head text-xs uppercase tracking-wider text-sage-600">
                     <tr>
                       <th className="p-3">Order ID</th>
                       <th className="p-3">Customer</th>
@@ -1285,14 +1410,14 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {!orders.length ? (
+                    {!filteredOrders.length ? (
                       <tr>
                         <td className="p-3 text-sage-600" colSpan={7}>
-                          No orders returned by the backend yet.
+                          No orders match the selected filters.
                         </td>
                       </tr>
                     ) : (
-                      orders.map((order) => {
+                      filteredOrders.map((order) => {
                         const orderId = String(order?._id || order?.id || order?.orderNumber || "-");
                         const items = getOrderItems(order);
                         const quantity = getOrderQuantity(order);

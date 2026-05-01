@@ -61,3 +61,21 @@ export const fetchSimilarProducts = async (productId) => {
 
   return Array.isArray(data) ? data : [];
 };
+
+export const updateProductStock = async (productId, quantity) => {
+  if (!productId || quantity === undefined || quantity === null) {
+    return null;
+  }
+
+  const numQuantity = Number(quantity);
+
+  if (!Number.isFinite(numQuantity) || numQuantity === 0) {
+    throw new Error("Quantity must be a non-zero number");
+  }
+
+  return apiRequest(`/products/${encodeURIComponent(productId)}/stock`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify({ quantity: numQuantity })
+  });
+};
