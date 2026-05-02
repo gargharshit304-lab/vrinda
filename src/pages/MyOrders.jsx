@@ -40,8 +40,15 @@ const formatDateTime = (value) => {
   return parsed.toLocaleString();
 };
 
+const normalizeStatus = (s) => {
+  const n = String(s || "").trim().toLowerCase();
+  if (n === "processing") return "pending";
+  if (n === "completed") return "delivered";
+  return n;
+};
+
 const getStatusMeta = (status) => {
-  const normalized = String(status || "processing").trim().toLowerCase();
+  const normalized = normalizeStatus(status || "pending");
 
   if (normalized === "packed") {
     return { label: "Packed", className: "status-packed" };
@@ -58,10 +65,10 @@ const getStatusMeta = (status) => {
   return { label: "Pending", className: "status-pending" };
 };
 
-const getOrderTrackingStatus = (order) => order?.status || order?.orderStatus || "Pending";
+const getOrderTrackingStatus = (order) => normalizeStatus(order?.status || order?.orderStatus || "Pending");
 
 const getTrackingStatusTone = (status) => {
-  const normalized = String(status || "pending").trim().toLowerCase();
+  const normalized = normalizeStatus(status || "pending");
 
   if (normalized === "packed") {
     return { label: "Packed", className: "status-packed" };
@@ -123,7 +130,7 @@ function OrderTimeline({ order, status }) {
     "delivered": 3
   };
 
-  const normalizedStatus = String(status || "pending").trim().toLowerCase();
+  const normalizedStatus = normalizeStatus(status || "pending");
   const currentStepIndex = statusMap[normalizedStatus] ?? 0;
   const statusTone = getTrackingStatusTone(status);
 

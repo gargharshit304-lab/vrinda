@@ -23,6 +23,13 @@ const formatDateTime = (value) => {
   return parsed.toLocaleString();
 };
 
+const normalizeStatus = (s) => {
+  const n = String(s || "").trim().toLowerCase();
+  if (n === "processing") return "pending";
+  if (n === "completed") return "delivered";
+  return n;
+};
+
 const getStatusTone = (status) => {
   const normalized = String(status || "pending").trim().toLowerCase();
 
@@ -44,7 +51,7 @@ const getStatusTone = (status) => {
 const getTrackingStatus = (order) => order?.status || order?.orderStatus || "Pending";
 
 const getProgress = (status) => {
-  const normalized = String(status || "Pending").trim().toLowerCase();
+  const normalized = normalizeStatus(status || "pending");
 
   switch (normalized) {
     case "pending":
@@ -63,7 +70,7 @@ const getProgress = (status) => {
 
 const getTimelineTimestamp = (order, stepLabel) => {
   const history = order?.statusHistory;
-  const normalizedStep = String(stepLabel || "").trim().toLowerCase();
+  const normalizedStep = normalizeStatus(stepLabel || "");
 
   if (history && typeof history === "object" && !Array.isArray(history)) {
     if (normalizedStep === "pending") {
@@ -96,7 +103,7 @@ const getTimelineTimestamp = (order, stepLabel) => {
 };
 
 const buildTimeline = (status) => {
-  const normalized = String(status || "pending").trim().toLowerCase();
+  const normalized = normalizeStatus(status || "pending");
   const statusOrder = ["pending", "packed", "out for delivery", "delivered"];
   const currentIndex = statusOrder.indexOf(normalized === "shipped" ? "out for delivery" : normalized);
 

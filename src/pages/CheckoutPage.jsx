@@ -4,15 +4,17 @@ import SiteNav from "../components/SiteNav";
 import { clearCart, getCartItems } from "../data/cartStorage";
 import { addOrder } from "../data/orderStorage";
 import { createOrderRequest } from "../data/orderApi";
+import { fetchUserProfile } from "../data/userApi";
 import { getAuthToken } from "../data/authStorage";
 
 const deliveryFee = 49;
 
 const initialForm = {
   fullName: "",
-  phoneNumber: "",
-  address: "",
+  phone: "",
+  addressLine: "",
   city: "",
+  state: "",
   pincode: "",
   paymentMethod: "",
   upiId: ""
@@ -39,6 +41,8 @@ const getStoredUser = () => {
   }
 };
 
+const getAddressId = (address, index = 0) => String(address?.id || address?._id || `address-${index}`);
+
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const [cartItems, setCartItems] = useState(() => getCartItems());
@@ -46,6 +50,9 @@ export default function CheckoutPage() {
   const [errors, setErrors] = useState({});
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profile, setProfile] = useState({ name: "", email: "", phone: "", addresses: [] });
+  const [selectedAddressId, setSelectedAddressId] = useState("new");
   const user = getStoredUser();
   const isAdminUser = user?.role === "admin";
 
@@ -63,12 +70,81 @@ export default function CheckoutPage() {
     };
   }, []);
 
-  // Redirect unauthenticated users to login
   useEffect(() => {
     if (!getAuthToken()) {
       navigate("/login");
     }
   }, [navigate]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadProfile = async () => {
+      if (!getAuthToken()) {
+        return;
+      }
+
+      try {
+        setProfileLoading(true);
+        const data = await fetchUserProfile();
+
+        if (cancelled) {
+          return;
+        }
+
+        const addresses = Array.isArray(data?.addresses) ? data.addresses : [];
+        const defaultAddress = addresses.find((address) => address?.isDefault) || addresses[0] || null;
+
+        setProfile({
+          name: data?.name || "",
+          email: data?.email || "",
+          phone: data?.phone || "",
+          addresses
+        });
+
+        if (defaultAddress) {
+          setSelectedAddressId(getAddressId(defaultAddress));
+          setFormData((current) => ({
+            ...current,
+            fullName: defaultAddress.fullName || data?.name || "",
+            phone: defaultAddress.phone || data?.phone || "",
+            addressLine: defaultAddress.addressLine || "",
+            city: defaultAddress.city || "",
+            state: defaultAddress.state || "",
+            pincode: defaultAddress.pincode || ""
+          }));
+        } else {
+          setSelectedAddressId("new");
+          setFormData((current) => ({
+            ...current,
+            fullName: data?.name || "",
+            phone: data?.phone || "",
+            addressLine: "",
+            city: "",
+            state: "",
+            pincode: ""
+          }));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrors((current) => ({
+            ...current,
+            profile: error?.message || "Unable to load profile data."
+          }));
+        }
+      } finally {
+        if (!cancelled) {
+          setProfileLoading(false);
+        }
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const subtotal = useMemo(
     () => cartItems.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0),
@@ -77,23 +153,73 @@ export default function CheckoutPage() {
 
   const total = subtotal > 0 ? subtotal + deliveryFee : 0;
 
+  const syncSelectionToForm = (address) => {
+    if (!address) {
+      return;
+    }
+
+    setFormData((current) => ({
+      ...current,
+      fullName: address.fullName || profile.name || "",
+      phone: address.phone || profile.phone || "",
+      addressLine: address.addressLine || "",
+      city: address.city || "",
+      state: address.state || "",
+      pincode: address.pincode || ""
+    }));
+  };
+
+  const handleAddressSelection = (event) => {
+    const nextId = event.target.value;
+    setSelectedAddressId(nextId);
+
+    if (nextId === "new") {
+      setFormData((current) => ({
+        ...current,
+        fullName: profile.name || current.fullName || "",
+        phone: profile.phone || "",
+        addressLine: "",
+        city: "",
+        state: "",
+        pincode: ""
+      }));
+      return;
+    }
+
+    const existingAddress = profile.addresses.find((address, index) => getAddressId(address, index) === nextId);
+    syncSelectionToForm(existingAddress);
+  };
+
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+
+    if (["fullName", "phone", "addressLine", "city", "state", "pincode"].includes(name) && selectedAddressId !== "new") {
+      setSelectedAddressId("new");
+    }
+
+    setFormData((current) => ({ ...current, [name]: value }));
+  };
+
   const validateStep = (step) => {
     const nextErrors = {};
 
-    // Check cart is not empty for all steps
     if (cartItems.length === 0) {
       nextErrors.cart = "Your cart is empty. Please add items before checkout.";
       return nextErrors;
     }
 
     if (step === 1) {
+      const phoneDigits = formData.phone.replace(/\D/g, "");
+      const pincodeDigits = formData.pincode.replace(/\D/g, "");
+
       if (!formData.fullName.trim()) nextErrors.fullName = "Full name is required.";
-      if (!formData.phoneNumber.trim()) nextErrors.phoneNumber = "Phone number is required.";
-      else if (!/^\+?[0-9\s()-]{8,15}$/.test(formData.phoneNumber.trim())) nextErrors.phoneNumber = "Enter a valid phone number.";
-      if (!formData.address.trim()) nextErrors.address = "Address is required.";
+      if (!phoneDigits) nextErrors.phone = "Phone number is required.";
+      else if (!/^\d{10}$/.test(phoneDigits)) nextErrors.phone = "Phone number must be exactly 10 digits.";
+      if (!formData.addressLine.trim()) nextErrors.addressLine = "Address line is required.";
       if (!formData.city.trim()) nextErrors.city = "City is required.";
-      if (!formData.pincode.trim()) nextErrors.pincode = "Pincode is required.";
-      else if (!/^[0-9]{6}$/.test(formData.pincode.trim())) nextErrors.pincode = "Enter a valid 6-digit pincode.";
+      if (!formData.state.trim()) nextErrors.state = "State is required.";
+      if (!pincodeDigits) nextErrors.pincode = "Pincode is required.";
+      else if (!/^\d{6}$/.test(pincodeDigits)) nextErrors.pincode = "Pincode must be exactly 6 digits.";
     }
 
     if (step === 2) {
@@ -107,11 +233,6 @@ export default function CheckoutPage() {
     }
 
     return nextErrors;
-  };
-
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-    setFormData((current) => ({ ...current, [name]: value }));
   };
 
   const goToNextStep = () => {
@@ -130,6 +251,15 @@ export default function CheckoutPage() {
     setErrors({});
   };
 
+  const buildShippingAddress = () => ({
+    fullName: formData.fullName.trim(),
+    phone: formData.phone.replace(/\D/g, ""),
+    addressLine: formData.addressLine.trim(),
+    city: formData.city.trim(),
+    state: formData.state.trim(),
+    pincode: formData.pincode.replace(/\D/g, "")
+  });
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     const nextErrors = validateStep(3);
@@ -138,13 +268,11 @@ export default function CheckoutPage() {
       return;
     }
 
-    // Final validation: check cart is not empty
     if (!cartItems || cartItems.length === 0) {
       setErrors({ cart: "Your cart is empty. Please add items before checkout." });
       return;
     }
 
-    // Check authentication
     if (!getAuthToken()) {
       setErrors({ cart: "Please sign in to place your order." });
       navigate("/login");
@@ -154,30 +282,18 @@ export default function CheckoutPage() {
     try {
       setIsSubmitting(true);
 
-      console.log("[CheckoutPage] Submitting order with cart items:", cartItems);
-
-      // Build order payload with correct structure
+      const shippingAddress = buildShippingAddress();
       const orderPayload = {
         items: cartItems.map((item) => ({
           productId: item.productId || item.id,
           quantity: Number(item.quantity || 1),
           price: Number(item.price || 0)
         })),
-        shippingAddress: {
-          fullName: formData.fullName,
-          phoneNumber: formData.phoneNumber,
-          address: formData.address,
-          city: formData.city,
-          pincode: formData.pincode
-        },
+        shippingAddress,
         paymentMethod: formData.paymentMethod === "upi" ? "FAKE_UPI" : "COD"
       };
 
-      console.log("[CheckoutPage] Order payload being sent:", JSON.stringify(orderPayload, null, 2));
-
       const apiOrder = await createOrderRequest(orderPayload);
-
-      console.log("[CheckoutPage] Order created successfully:", apiOrder);
 
       const orderData = {
         id: apiOrder?.orderNumber || apiOrder?._id || `VR-${Date.now().toString().slice(-8)}`,
@@ -189,9 +305,10 @@ export default function CheckoutPage() {
           quantity: Number(item.quantity || 0)
         })),
         total: Number(apiOrder?.totalAmount) || total,
-        status: "Processing",
+        status: "Pending",
         paymentMethod: formData.paymentMethod === "upi" ? "Fake UPI" : "Cash on Delivery",
-        deliveryInfo: "Expected delivery in 3-5 business days"
+        deliveryInfo: "Expected delivery in 3-5 business days",
+        shippingAddress
       };
 
       addOrder(orderData);
@@ -199,14 +316,28 @@ export default function CheckoutPage() {
       setCartItems([]);
       setFormData(initialForm);
       setErrors({});
+
+      try {
+        const refreshedProfile = await fetchUserProfile();
+        setProfile({
+          name: refreshedProfile?.name || "",
+          email: refreshedProfile?.email || "",
+          phone: refreshedProfile?.phone || "",
+          addresses: Array.isArray(refreshedProfile?.addresses) ? refreshedProfile.addresses : []
+        });
+      } catch {
+        // Non-blocking refresh after order creation.
+      }
+
       navigate("/order-confirmation", { state: { order: orderData } });
     } catch (error) {
-      console.log("[CheckoutPage] Order submission error:", error.message);
       setErrors({ cart: error.message || "Unable to place order right now." });
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const shippingDisplay = [formData.addressLine, formData.city, formData.state, formData.pincode].filter(Boolean).join(", ");
 
   return (
     <div className="pb-16">
@@ -229,6 +360,12 @@ export default function CheckoutPage() {
           </section>
         ) : null}
 
+        {errors.profile ? (
+          <section className="mb-5 rounded-[26px] border border-rose-200 bg-rose-50 px-5 py-4 text-rose-700 shadow-soft">
+            <p className="text-sm font-semibold">{errors.profile}</p>
+          </section>
+        ) : null}
+
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_390px]">
           <form onSubmit={handleSubmit} className="glass-card rounded-[30px] border border-white/70 bg-white/72 p-5 shadow-soft md:p-7">
             <div className="mb-5">
@@ -236,6 +373,7 @@ export default function CheckoutPage() {
               <p className="mt-2 text-sm leading-relaxed text-sage-700">
                 Complete shipping, choose payment, and review your order before placing it.
               </p>
+              {profileLoading ? <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-sage-600">Loading saved profile...</p> : null}
             </div>
 
             <div className="mb-6 grid gap-2 sm:grid-cols-3">
@@ -261,8 +399,41 @@ export default function CheckoutPage() {
             </div>
 
             {currentStep === 1 ? (
-              <div>
-                <h3 className="mb-3 text-lg font-extrabold text-sage-800">Shipping Address</h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-extrabold text-sage-800">Shipping Address</h3>
+                  {profile.addresses.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAddressId("new")}
+                      className="rounded-full border border-sage-200/80 bg-white/85 px-4 py-2 text-xs font-extrabold uppercase tracking-[0.08em] text-sage-800 transition duration-300 hover:bg-white"
+                    >
+                      Add New Address
+                    </button>
+                  ) : null}
+                </div>
+
+                {profile.addresses.length > 0 ? (
+                  <label className="block space-y-1.5">
+                    <span className="text-xs font-extrabold uppercase tracking-[0.18em] text-sage-700/90">Select Address</span>
+                    <select
+                      value={selectedAddressId}
+                      onChange={handleAddressSelection}
+                      className="w-full rounded-2xl border border-sage-200/85 bg-white px-4 py-3 text-sm text-sage-800 outline-none transition focus:border-sage-400"
+                    >
+                      <option value="new">Add New Address</option>
+                      {profile.addresses.map((address, index) => {
+                        const addressId = getAddressId(address, index);
+                        return (
+                          <option key={addressId} value={addressId}>
+                            {address.fullName || "Saved address"} - {address.addressLine || "Address"}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
+                ) : null}
+
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field
                     label="Full Name"
@@ -275,20 +446,21 @@ export default function CheckoutPage() {
                   />
                   <Field
                     label="Phone Number"
-                    name="phoneNumber"
-                    value={formData.phoneNumber}
+                    name="phone"
+                    value={formData.phone}
                     onChange={handleChange}
-                    placeholder="+91 98765 43210"
-                    error={errors.phoneNumber}
+                    placeholder="10-digit phone number"
+                    error={errors.phone}
                   />
                   <Field label="City" name="city" value={formData.city} onChange={handleChange} placeholder="Jaipur" error={errors.city} />
+                  <Field label="State" name="state" value={formData.state} onChange={handleChange} placeholder="Rajasthan" error={errors.state} />
                   <Field
-                    label="Address"
-                    name="address"
-                    value={formData.address}
+                    label="Address Line"
+                    name="addressLine"
+                    value={formData.addressLine}
                     onChange={handleChange}
                     placeholder="House no., street, area"
-                    error={errors.address}
+                    error={errors.addressLine}
                     as="textarea"
                     className="sm:col-span-2"
                   />
@@ -360,8 +532,8 @@ export default function CheckoutPage() {
                 <section className="rounded-2xl border border-sage-200/80 bg-white/85 p-4">
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-sage-700/75">Shipping</p>
                   <p className="mt-1 text-sm font-semibold text-sage-800">{formData.fullName}</p>
-                  <p className="text-sm text-sage-700">{formData.phoneNumber}</p>
-                  <p className="text-sm text-sage-700">{formData.address}, {formData.city} - {formData.pincode}</p>
+                  <p className="text-sm text-sage-700">{formData.phone}</p>
+                  <p className="text-sm text-sage-700">{shippingDisplay || "No address selected yet."}</p>
                 </section>
 
                 <section className="rounded-2xl border border-sage-200/80 bg-white/85 p-4">
@@ -387,6 +559,7 @@ export default function CheckoutPage() {
                 </section>
               </div>
             ) : null}
+
             <div className="mt-6 flex flex-wrap items-center gap-3">
               {currentStep > 1 ? (
                 <button
@@ -451,7 +624,7 @@ export default function CheckoutPage() {
             </div>
 
             <div className="mt-4 rounded-2xl border border-sage-200/80 bg-white/80 p-4 text-sm leading-relaxed text-sage-700">
-              Payment is demo-only for now. You can choose COD or Fake UPI to complete this checkout flow.
+              Saved addresses are loaded from your profile. When you use a new shipping address, it is saved to your profile automatically after order placement.
             </div>
           </aside>
         </section>
@@ -478,13 +651,7 @@ function Field({ label, name, value, onChange, placeholder, error, as = "input",
           className={`${commonClassName} resize-none`}
         />
       ) : (
-        <input
-          name={name}
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          className={commonClassName}
-        />
+        <input name={name} value={value} onChange={onChange} placeholder={placeholder} className={commonClassName} />
       )}
       {error ? <p className="text-xs font-medium text-rose-600">{error}</p> : null}
     </label>

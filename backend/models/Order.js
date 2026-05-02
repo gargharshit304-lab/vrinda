@@ -42,9 +42,12 @@ const orderSchema = new mongoose.Schema(
     },
     shippingAddress: {
       fullName: String,
+      phone: String,
       phoneNumber: String,
+      addressLine: String,
       address: String,
       city: String,
+      state: String,
       pincode: String
     },
     paymentMethod: {
@@ -82,8 +85,8 @@ const orderSchema = new mongoose.Schema(
     },
     orderStatus: {
       type: String,
-      enum: ["processing", "packed", "shipped", "delivered", "cancelled"],
-      default: "processing"
+      enum: ["processing", "pending", "packed", "shipped", "delivered", "cancelled"],
+      default: "pending"
     },
     subtotal: {
       type: Number,

@@ -1,47 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 import { getOrders } from "../data/orderStorage";
-import { clearAuthSession } from "../data/authStorage";
+import { clearAuthSession, getAuthToken, USER_STORAGE_KEY } from "../data/authStorage";
+import { fetchUserProfile, updateUserProfile } from "../data/userApi";
 
-const AUTH_STORAGE_KEY = "vrinda.currentUser";
 const VALID_TABS = ["profile", "orders", "wishlist", "addresses", "settings"];
 
 const wishlistItems = [
-  {
-    id: "W-01",
-    name: "Lemon Fresh Ayur Soap",
-    price: "Rs 349",
-    image: "/images/soap-lemon.jpeg"
-  },
-  {
-    id: "W-02",
-    name: "Almond Milk Moisture Bar",
-    price: "Rs 459",
-    image: "/images/soap-almond.jpeg"
-  },
-  {
-    id: "W-03",
-    name: "Golden Tiger Haldi Soap",
-    price: "Rs 479",
-    image: "/images/soap-golden-tiger.jpeg"
-  }
+  { id: "W-01", name: "Lemon Fresh Ayur Soap", price: "Rs 349", image: "/images/soap-lemon.jpeg" },
+  { id: "W-02", name: "Almond Milk Moisture Bar", price: "Rs 459", image: "/images/soap-almond.jpeg" },
+  { id: "W-03", name: "Golden Tiger Haldi Soap", price: "Rs 479", image: "/images/soap-golden-tiger.jpeg" }
 ];
 
-const savedAddresses = [
-  {
-    label: "Home",
-    person: "Harshit Sharma",
-    phone: "+91 98765 43210",
-    line: "26, Green Valley Residency, Jaipur, Rajasthan 302001"
-  },
-  {
-    label: "Office",
-    person: "Harshit Sharma",
-    phone: "+91 98765 43210",
-    line: "4th Floor, Amber Business Park, MI Road, Jaipur 302004"
-  }
-];
+const emptyAddressForm = {
+  id: "",
+  fullName: "",
+  phone: "",
+  addressLine: "",
+  city: "",
+  state: "",
+  pincode: "",
+  isDefault: false
+};
 
 const formatInr = (amount) =>
   new Intl.NumberFormat("en-IN", {
@@ -67,55 +48,142 @@ const formatDate = (value) => {
   });
 };
 
+const getAddressId = (address, index = 0) => String(address?.id || address?._id || `address-${index}`);
+
+const sanitizeAddressForm = (address) => ({
+  id: String(address?.id || address?._id || ""),
+  fullName: String(address?.fullName || "").trim(),
+  phone: String(address?.phone || "").replace(/\D/g, ""),
+  addressLine: String(address?.addressLine || "").trim(),
+  city: String(address?.city || "").trim(),
+  state: String(address?.state || "").trim(),
+  pincode: String(address?.pincode || "").replace(/\D/g, ""),
+  isDefault: Boolean(address?.isDefault)
+});
+
+const readStoredUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem(USER_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+};
+
+const persistStoredUser = (profile) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const existing = readStoredUser() || {};
+    const nextUser = {
+      ...existing,
+      _id: existing._id || profile?.id || existing.id || "",
+      id: profile?.id || existing.id || existing._id || "",
+      name: profile?.name || existing.name || "",
+      email: profile?.email || existing.email || "",
+      phone: profile?.phone || "",
+      addresses: Array.isArray(profile?.addresses) ? profile.addresses : existing.addresses || [],
+      role: profile?.role || existing.role || "user"
+    };
+
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser));
+    window.dispatchEvent(new Event("vrinda-auth-changed"));
+  } catch {
+    // Ignore local cache update failures.
+  }
+};
+
+const buildAddressKey = (address) => `${String(address?.addressLine || "").trim().toLowerCase()}|${String(address?.pincode || "").replace(/\D/g, "")}`;
+
 export default function ProfilePage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("profile");
-  const [isEditing, setIsEditing] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [orders, setOrders] = useState(() => getOrders());
   const [expandedOrderId, setExpandedOrderId] = useState("");
-
-  const [profileForm, setProfileForm] = useState({
-    fullName: "Harshit",
-    email: "harshit@example.com",
-    phone: "+91 98765 43210",
-    address: "26, Green Valley Residency, Jaipur"
-  });
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [addressSaving, setAddressSaving] = useState(false);
+  const [profileStatus, setProfileStatus] = useState("");
+  const [addressStatus, setAddressStatus] = useState("");
+  const [profile, setProfile] = useState({ id: "", name: "", email: "", phone: "", addresses: [] });
+  const [profileForm, setProfileForm] = useState({ name: "", phone: "", email: "" });
+  const [addressForm, setAddressForm] = useState(emptyAddressForm);
+  const [editingAddressId, setEditingAddressId] = useState("");
 
   useEffect(() => {
+    if (!getAuthToken()) {
+      navigate("/login");
+      return;
+    }
+
     const params = new URLSearchParams(location.search);
     const tab = params.get("tab");
     if (tab && VALID_TABS.includes(tab)) {
       setActiveTab(tab);
-      return;
+    } else {
+      setActiveTab("profile");
     }
-    setActiveTab("profile");
-  }, [location.search]);
+  }, [location.search, navigate]);
 
   useEffect(() => {
-    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (!raw) {
-      return;
-    }
+    let cancelled = false;
 
-    try {
-      const parsedUser = JSON.parse(raw);
-      setProfileForm((prev) => ({
-        ...prev,
-        fullName: parsedUser?.name || prev.fullName,
-        email: parsedUser?.email || prev.email
-      }));
-    } catch {
-      // Keep defaults if local storage data is malformed.
-    }
-  }, []);
+    const loadProfile = async () => {
+      try {
+        setProfileLoading(true);
+        const data = await fetchUserProfile();
+        if (cancelled) {
+          return;
+        }
 
-  useEffect(() => {
+        const addresses = Array.isArray(data?.addresses) ? data.addresses : [];
+        const nextProfile = {
+          id: data?.id || data?._id || "",
+          name: data?.name || "",
+          email: data?.email || "",
+          phone: data?.phone || "",
+          addresses
+        };
+
+        setProfile(nextProfile);
+        setProfileForm({
+          name: nextProfile.name,
+          phone: nextProfile.phone,
+          email: nextProfile.email
+        });
+
+        const defaultAddress = addresses.find((address) => address?.isDefault) || addresses[0] || null;
+        if (defaultAddress) {
+          setAddressForm(sanitizeAddressForm(defaultAddress));
+          setEditingAddressId(getAddressId(defaultAddress));
+        } else {
+          setAddressForm(emptyAddressForm);
+          setEditingAddressId("");
+        }
+
+        persistStoredUser(nextProfile);
+      } catch (error) {
+        if (!cancelled) {
+          setProfileStatus(error?.message || "Unable to load profile data.");
+        }
+      } finally {
+        if (!cancelled) {
+          setProfileLoading(false);
+        }
+      }
+    };
+
+    loadProfile();
+
     const syncOrders = () => setOrders(getOrders());
     window.addEventListener("storage", syncOrders);
     window.addEventListener("vrinda-orders-changed", syncOrders);
+
     return () => {
+      cancelled = true;
       window.removeEventListener("storage", syncOrders);
       window.removeEventListener("vrinda-orders-changed", syncOrders);
     };
@@ -123,10 +191,10 @@ export default function ProfilePage() {
 
   const currentUser = useMemo(() => {
     return {
-      name: profileForm.fullName || "Harshit",
-      email: profileForm.email || "harshit@example.com"
+      name: profileForm.name || profile.name || "",
+      email: profileForm.email || profile.email || ""
     };
-  }, [profileForm.fullName, profileForm.email]);
+  }, [profileForm.email, profileForm.name, profile.email, profile.name]);
 
   const initials =
     currentUser.name
@@ -134,7 +202,7 @@ export default function ProfilePage() {
       .filter(Boolean)
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase())
-      .join("") || "H";
+      .join("") || "?";
 
   const openTab = (tab) => {
     setActiveTab(tab);
@@ -146,6 +214,169 @@ export default function ProfilePage() {
     navigate("/");
   };
 
+  const saveProfile = async () => {
+    try {
+      setProfileSaving(true);
+      setProfileStatus("");
+      const response = await updateUserProfile({
+        name: profileForm.name.trim(),
+        phone: profileForm.phone.replace(/\D/g, ""),
+        addresses: profile.addresses
+      });
+
+      const nextProfile = {
+        id: response?.id || profile.id,
+        name: response?.name || "",
+        email: response?.email || profileForm.email || "",
+        phone: response?.phone || "",
+        addresses: Array.isArray(response?.addresses) ? response.addresses : profile.addresses
+      };
+
+      setProfile(nextProfile);
+      setProfileForm((current) => ({
+        ...current,
+        name: nextProfile.name,
+        phone: nextProfile.phone,
+        email: nextProfile.email
+      }));
+      persistStoredUser(nextProfile);
+      setProfileStatus("Profile saved successfully.");
+    } catch (error) {
+      setProfileStatus(error?.message || "Failed to save profile.");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const startAddAddress = () => {
+    setAddressForm({ ...emptyAddressForm, fullName: profile.name || "", phone: profile.phone || "" });
+    setEditingAddressId("");
+    setAddressStatus("");
+    setActiveTab("addresses");
+  };
+
+  const editAddress = (address) => {
+    setEditingAddressId(getAddressId(address));
+    setAddressForm(sanitizeAddressForm(address));
+    setAddressStatus("");
+    setActiveTab("addresses");
+  };
+
+  const deleteAddress = async (addressId) => {
+    const nextAddresses = profile.addresses.filter((address, index) => getAddressId(address, index) !== addressId);
+    if (nextAddresses.length && !nextAddresses.some((address) => address.isDefault)) {
+      nextAddresses[0] = { ...nextAddresses[0], isDefault: true };
+    }
+
+    try {
+      setAddressSaving(true);
+      const response = await updateUserProfile({
+        name: profile.name,
+        phone: profile.phone,
+        addresses: nextAddresses
+      });
+
+      const updatedAddresses = Array.isArray(response?.addresses) ? response.addresses : nextAddresses;
+      const nextProfile = {
+        ...profile,
+        addresses: updatedAddresses
+      };
+
+      setProfile(nextProfile);
+      persistStoredUser(nextProfile);
+      if (editingAddressId === addressId) {
+        setEditingAddressId("");
+        setAddressForm(emptyAddressForm);
+      }
+      setAddressStatus("Address deleted successfully.");
+    } catch (error) {
+      setAddressStatus(error?.message || "Failed to delete address.");
+    } finally {
+      setAddressSaving(false);
+    }
+  };
+
+  const saveAddress = async () => {
+    const fullName = addressForm.fullName.trim();
+    const phone = addressForm.phone.replace(/\D/g, "");
+    const addressLine = addressForm.addressLine.trim();
+    const city = addressForm.city.trim();
+    const state = addressForm.state.trim();
+    const pincode = addressForm.pincode.replace(/\D/g, "");
+
+    if (!fullName || !phone || phone.length !== 10 || !addressLine || !city || !state || pincode.length !== 6) {
+      setAddressStatus("Please complete the address with a 10-digit phone and 6-digit pincode.");
+      return;
+    }
+
+    const candidate = {
+      id: editingAddressId || `address-${Date.now()}`,
+      fullName,
+      phone,
+      addressLine,
+      city,
+      state,
+      pincode,
+      isDefault: Boolean(addressForm.isDefault)
+    };
+
+    let nextAddresses = profile.addresses.map((address, index) => ({ ...address, id: getAddressId(address, index) }));
+    const existingIndex = nextAddresses.findIndex((address) => address.id === editingAddressId || buildAddressKey(address) === buildAddressKey(candidate));
+
+    if (existingIndex >= 0) {
+      nextAddresses[existingIndex] = { ...candidate, id: nextAddresses[existingIndex].id || candidate.id };
+    } else {
+      nextAddresses = [...nextAddresses, candidate];
+    }
+
+    if (candidate.isDefault || nextAddresses.length === 1) {
+      nextAddresses = nextAddresses.map((address, index) => ({ ...address, isDefault: index === 0 }));
+      nextAddresses[existingIndex >= 0 ? existingIndex : nextAddresses.length - 1].isDefault = true;
+    } else if (!nextAddresses.some((address) => address.isDefault) && nextAddresses.length) {
+      nextAddresses[0].isDefault = true;
+    }
+
+    try {
+      setAddressSaving(true);
+      setAddressStatus("");
+
+      const response = await updateUserProfile({
+        name: profileForm.name.trim(),
+        phone: profileForm.phone.replace(/\D/g, "") || phone,
+        addresses: nextAddresses
+      });
+
+      const updatedAddresses = Array.isArray(response?.addresses) ? response.addresses : nextAddresses;
+      const nextProfile = {
+        ...profile,
+        name: response?.name || profile.name,
+        email: response?.email || profile.email,
+        phone: response?.phone || profile.phone,
+        addresses: updatedAddresses
+      };
+
+      setProfile(nextProfile);
+      setProfileForm((current) => ({
+        ...current,
+        name: nextProfile.name,
+        phone: nextProfile.phone,
+        email: nextProfile.email
+      }));
+      persistStoredUser(nextProfile);
+      setAddressForm(emptyAddressForm);
+      setEditingAddressId("");
+      setAddressStatus("Address saved successfully.");
+    } catch (error) {
+      setAddressStatus(error?.message || "Failed to save address.");
+    } finally {
+      setAddressSaving(false);
+    }
+  };
+
+  if (!getAuthToken()) {
+    return <Navigate to="/login" replace />;
+  }
+
   return (
     <div className="pb-12">
       <SiteNav />
@@ -156,13 +387,13 @@ export default function ProfilePage() {
               <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br from-sage-700 to-sage-500 text-lg font-extrabold text-white shadow-md">
                 {initials}
               </div>
-              <h1 className="mt-3 text-lg font-bold text-sage-800">{currentUser.name}</h1>
-              <p className="text-sm text-sage-700/80">{currentUser.email}</p>
+              <h1 className="mt-3 text-lg font-bold text-sage-800">{currentUser.name || "Profile"}</h1>
+              <p className="text-sm text-sage-700/80">{currentUser.email || "No email saved"}</p>
             </div>
 
             <div className="mt-4 hidden space-y-1.5 lg:block">
               <SidebarButton label="My Profile" active={activeTab === "profile"} onClick={() => openTab("profile")} />
-              <SidebarButton label="My Orders" active={activeTab === "orders"} onClick={() => navigate("/orders")} />
+              <SidebarButton label="My Orders" active={activeTab === "orders"} onClick={() => openTab("orders")} />
               <SidebarButton label="Wishlist" active={activeTab === "wishlist"} onClick={() => openTab("wishlist")} />
               <SidebarButton label="Addresses" active={activeTab === "addresses"} onClick={() => openTab("addresses")} />
               <SidebarButton label="Settings" active={activeTab === "settings"} onClick={() => openTab("settings")} />
@@ -180,7 +411,7 @@ export default function ProfilePage() {
             <div className="glass-card rounded-2xl border border-white/70 bg-white/65 p-2 lg:hidden">
               <div className="flex gap-2 overflow-x-auto pb-1">
                 <MobileTab label="Profile" active={activeTab === "profile"} onClick={() => openTab("profile")} />
-                <MobileTab label="Orders" active={activeTab === "orders"} onClick={() => navigate("/orders")} />
+                <MobileTab label="Orders" active={activeTab === "orders"} onClick={() => openTab("orders")} />
                 <MobileTab label="Wishlist" active={activeTab === "wishlist"} onClick={() => openTab("wishlist")} />
                 <MobileTab label="Addresses" active={activeTab === "addresses"} onClick={() => openTab("addresses")} />
                 <MobileTab label="Settings" active={activeTab === "settings"} onClick={() => openTab("settings")} />
@@ -194,38 +425,45 @@ export default function ProfilePage() {
                     <h2 className="font-display text-4xl font-semibold text-sage-800">My Profile</h2>
                     <button
                       type="button"
-                      onClick={() => setIsEditing((value) => !value)}
-                      className="rounded-full bg-sage-700 px-4 py-2 text-xs font-extrabold uppercase tracking-[0.08em] text-white transition duration-300 hover:-translate-y-0.5 hover:bg-sage-800"
+                      onClick={saveProfile}
+                      disabled={profileSaving}
+                      className="rounded-full bg-sage-700 px-4 py-2 text-xs font-extrabold uppercase tracking-[0.08em] text-white transition duration-300 hover:-translate-y-0.5 hover:bg-sage-800 disabled:opacity-60"
                     >
-                      {isEditing ? "Save" : "Edit Profile"}
+                      {profileSaving ? "Saving..." : "Save Profile"}
                     </button>
                   </div>
+
+                  {profileStatus ? (
+                    <p className="mb-4 rounded-2xl border border-sage-200 bg-sage-50 px-4 py-3 text-sm font-semibold text-sage-700">{profileStatus}</p>
+                  ) : null}
+
+                  {profileLoading ? (
+                    <p className="mb-4 rounded-2xl border border-sage-200/80 bg-white/70 px-4 py-3 text-sm font-semibold text-sage-700">
+                      Loading your saved profile...
+                    </p>
+                  ) : null}
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <ProfileField
                       label="Full Name"
-                      value={profileForm.fullName}
-                      disabled={!isEditing}
-                      onChange={(value) => setProfileForm((prev) => ({ ...prev, fullName: value }))}
+                      value={profileForm.name}
+                      onChange={(value) => setProfileForm((prev) => ({ ...prev, name: value }))}
                     />
                     <ProfileField
                       label="Email"
                       value={profileForm.email}
-                      disabled={!isEditing}
-                      onChange={(value) => setProfileForm((prev) => ({ ...prev, email: value }))}
+                      disabled
+                      onChange={() => {}}
                     />
                     <ProfileField
                       label="Phone Number"
                       value={profileForm.phone}
-                      disabled={!isEditing}
                       onChange={(value) => setProfileForm((prev) => ({ ...prev, phone: value }))}
+                      placeholder="10-digit phone number"
                     />
-                    <ProfileField
-                      label="Address"
-                      value={profileForm.address}
-                      disabled={!isEditing}
-                      onChange={(value) => setProfileForm((prev) => ({ ...prev, address: value }))}
-                    />
+                    <div className="rounded-2xl border border-sage-200/80 bg-white/70 p-4 text-sm text-sage-700">
+                      Saved phone and addresses are loaded from your profile database record. If nothing is saved yet, the fields stay blank.
+                    </div>
                   </div>
                 </section>
               )}
@@ -257,7 +495,7 @@ export default function ProfilePage() {
                                     : "bg-amber-100 text-amber-700"
                                 }`}
                               >
-                                {order.status || "Processing"}
+                                {order.status || "Pending"}
                               </span>
                               <button
                                 type="button"
@@ -310,11 +548,7 @@ export default function ProfilePage() {
                         className="glass-card group rounded-3xl border border-white/70 bg-white/65 p-4 shadow-soft transition duration-300 hover:-translate-y-1 hover:shadow-[0_18px_30px_rgba(31,61,43,0.12)]"
                       >
                         <div className="overflow-hidden rounded-2xl">
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            className="h-44 w-full object-cover transition duration-700 group-hover:scale-105"
-                          />
+                          <img src={item.image} alt={item.name} className="h-44 w-full object-cover transition duration-700 group-hover:scale-105" />
                         </div>
                         <h3 className="mt-3 text-base font-bold text-sage-800">{item.name}</h3>
                         <p className="text-sm font-semibold text-sage-700">{item.price}</p>
@@ -328,28 +562,135 @@ export default function ProfilePage() {
               )}
 
               {activeTab === "addresses" && (
-                <section className="space-y-3">
+                <section className="space-y-4">
                   <div className="flex items-center justify-between gap-2">
-                    <h2 className="font-display text-4xl font-semibold text-sage-800">Addresses</h2>
-                    <button className="rounded-full border border-sage-200/80 bg-white/80 px-4 py-2 text-xs font-extrabold uppercase tracking-[0.08em] text-sage-800 transition duration-300 hover:-translate-y-0.5 hover:bg-white">
-                      Add New Address
+                    <div>
+                      <h2 className="font-display text-4xl font-semibold text-sage-800">Addresses</h2>
+                      <p className="mt-1 text-sm text-sage-700">Saved addresses are stored in your profile and used to prefill checkout.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={startAddAddress}
+                      className="rounded-full border border-sage-200/80 bg-white/80 px-4 py-2 text-xs font-extrabold uppercase tracking-[0.08em] text-sage-800 transition duration-300 hover:-translate-y-0.5 hover:bg-white"
+                    >
+                      Add Address
                     </button>
                   </div>
 
+                  {addressStatus ? (
+                    <p className="rounded-2xl border border-sage-200 bg-sage-50 px-4 py-3 text-sm font-semibold text-sage-700">{addressStatus}</p>
+                  ) : null}
+
+                  <article className="glass-card rounded-3xl border border-white/70 bg-white/65 p-5 shadow-soft">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <ProfileField
+                        label="Full Name"
+                        value={addressForm.fullName}
+                        onChange={(value) => setAddressForm((prev) => ({ ...prev, fullName: value }))}
+                      />
+                      <ProfileField
+                        label="Phone"
+                        value={addressForm.phone}
+                        onChange={(value) => setAddressForm((prev) => ({ ...prev, phone: value }))}
+                        placeholder="10-digit phone number"
+                      />
+                      <ProfileField
+                        label="Address Line"
+                        value={addressForm.addressLine}
+                        onChange={(value) => setAddressForm((prev) => ({ ...prev, addressLine: value }))}
+                        className="sm:col-span-2"
+                      />
+                      <ProfileField
+                        label="City"
+                        value={addressForm.city}
+                        onChange={(value) => setAddressForm((prev) => ({ ...prev, city: value }))}
+                      />
+                      <ProfileField
+                        label="State"
+                        value={addressForm.state}
+                        onChange={(value) => setAddressForm((prev) => ({ ...prev, state: value }))}
+                      />
+                      <ProfileField
+                        label="Pincode"
+                        value={addressForm.pincode}
+                        onChange={(value) => setAddressForm((prev) => ({ ...prev, pincode: value }))}
+                        placeholder="6-digit pincode"
+                      />
+                    </div>
+
+                    <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-sage-800">
+                      <input
+                        type="checkbox"
+                        checked={addressForm.isDefault}
+                        onChange={(event) => setAddressForm((prev) => ({ ...prev, isDefault: event.target.checked }))}
+                      />
+                      Make this the default address
+                    </label>
+
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={saveAddress}
+                        disabled={addressSaving}
+                        className="rounded-full bg-sage-700 px-5 py-2 text-xs font-extrabold uppercase tracking-[0.08em] text-white transition duration-300 hover:-translate-y-0.5 hover:bg-sage-800 disabled:opacity-60"
+                      >
+                        {addressSaving ? "Saving..." : editingAddressId ? "Update Address" : "Save Address"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAddressForm(emptyAddressForm);
+                          setEditingAddressId("");
+                          setAddressStatus("");
+                        }}
+                        className="rounded-full border border-sage-200/80 bg-white px-5 py-2 text-xs font-extrabold uppercase tracking-[0.08em] text-sage-800 transition duration-300 hover:bg-white"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </article>
+
                   <div className="space-y-3">
-                    {savedAddresses.map((address) => (
-                      <article key={address.label} className="glass-card rounded-3xl border border-white/70 bg-white/65 p-5 shadow-soft">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-lg font-bold text-sage-800">{address.label}</h3>
-                          <span className="rounded-full bg-sage-700/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-sage-700">
-                            Default
-                          </span>
-                        </div>
-                        <p className="mt-2 text-sm font-semibold text-sage-700">{address.person}</p>
-                        <p className="text-sm text-sage-700/85">{address.phone}</p>
-                        <p className="mt-1 text-sm text-sage-700/85">{address.line}</p>
-                      </article>
-                    ))}
+                    {profile.addresses.length > 0 ? (
+                      profile.addresses.map((address, index) => {
+                        const addressId = getAddressId(address, index);
+                        return (
+                          <article key={addressId} className="glass-card rounded-3xl border border-white/70 bg-white/65 p-5 shadow-soft">
+                            <div className="flex items-center justify-between gap-3">
+                              <h3 className="text-lg font-bold text-sage-800">{address.fullName || "Saved Address"}</h3>
+                              {address.isDefault ? (
+                                <span className="rounded-full bg-sage-700/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-sage-700">Default</span>
+                              ) : null}
+                            </div>
+                            <p className="mt-2 text-sm font-semibold text-sage-700">{address.phone}</p>
+                            <p className="text-sm text-sage-700/85">
+                              {address.addressLine}, {address.city}, {address.state} - {address.pincode}
+                            </p>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => editAddress(address)}
+                                className="rounded-full border border-sage-200/80 bg-white px-4 py-2 text-xs font-extrabold uppercase tracking-[0.08em] text-sage-800 transition duration-300 hover:bg-white"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteAddress(addressId)}
+                                disabled={addressSaving}
+                                className="rounded-full border border-rose-200/80 bg-rose-50 px-4 py-2 text-xs font-extrabold uppercase tracking-[0.08em] text-rose-700 transition duration-300 hover:bg-rose-100 disabled:opacity-60"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </article>
+                        );
+                      })
+                    ) : (
+                      <div className="glass-card rounded-2xl border border-white/70 bg-white/65 p-6 text-sm font-medium text-sage-700">
+                        No saved addresses yet. Add one to auto-fill checkout next time.
+                      </div>
+                    )}
                   </div>
                 </section>
               )}
@@ -415,9 +756,7 @@ function SidebarButton({ label, active, onClick }) {
       type="button"
       onClick={onClick}
       className={`w-full rounded-xl px-4 py-2.5 text-left text-sm font-semibold tracking-[0.02em] transition duration-300 ease-in-out ${
-        active
-          ? "bg-sage-700 text-white shadow-[0_10px_20px_rgba(31,61,43,0.22)]"
-          : "text-sage-800 hover:bg-white/75 hover:text-[#1f3d2b]"
+        active ? "bg-sage-700 text-white shadow-[0_10px_20px_rgba(31,61,43,0.22)]" : "text-sage-800 hover:bg-white/75 hover:text-[#1f3d2b]"
       }`}
     >
       {label}
@@ -431,9 +770,7 @@ function MobileTab({ label, active, onClick }) {
       type="button"
       onClick={onClick}
       className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-extrabold uppercase tracking-[0.08em] transition duration-300 ${
-        active
-          ? "bg-sage-700 text-white shadow-[0_10px_20px_rgba(31,61,43,0.22)]"
-          : "bg-white/75 text-sage-800"
+        active ? "bg-sage-700 text-white shadow-[0_10px_20px_rgba(31,61,43,0.22)]" : "bg-white/75 text-sage-800"
       }`}
     >
       {label}
@@ -441,18 +778,17 @@ function MobileTab({ label, active, onClick }) {
   );
 }
 
-function ProfileField({ label, value, onChange, disabled }) {
+function ProfileField({ label, value, onChange, disabled = false, placeholder = "" , className = ""}) {
   return (
-    <label className="text-sm font-bold text-sage-800">
+    <label className={`text-sm font-bold text-sage-800 ${className}`}>
       {label}
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
+        placeholder={placeholder}
         className={`mt-1 w-full rounded-xl border px-3 py-3 text-sm outline-none transition ${
-          disabled
-            ? "border-sage-200/70 bg-sage-100/60 text-sage-700"
-            : "border-sage-300/80 bg-white/90 text-sage-800 focus:border-sage-500"
+          disabled ? "border-sage-200/70 bg-sage-100/60 text-sage-700" : "border-sage-300/80 bg-white/90 text-sage-800 focus:border-sage-500"
         }`}
       />
     </label>

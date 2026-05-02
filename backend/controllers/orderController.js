@@ -2,12 +2,13 @@ import mongoose from "mongoose";
 import { nanoid } from "nanoid";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
+import { normalizeShippingAddress, syncUserAddressFromOrder } from "../utils/userProfile.js";
 
 const buildOrderNumber = () => `ORD-${nanoid(10)}`;
 
 const canonicalOrderStatuses = {
-  pending: { status: "Pending", orderStatus: "processing" },
-  processing: { status: "Pending", orderStatus: "processing" },
+  pending: { status: "Pending", orderStatus: "pending" },
+  processing: { status: "Pending", orderStatus: "pending" },
   packed: { status: "Packed", orderStatus: "packed" },
   "out for delivery": { status: "Out for Delivery", orderStatus: "shipped" },
   shipped: { status: "Out for Delivery", orderStatus: "shipped" },
@@ -95,6 +96,8 @@ export const createOrder = async (req, res, next) => {
       error.statusCode = 400;
       throw error;
     }
+
+    const normalizedShippingAddress = normalizeShippingAddress(shippingAddress);
 
     const normalizedItems = [];
     let subtotal = 0;
@@ -194,7 +197,7 @@ export const createOrder = async (req, res, next) => {
       orderNumber: buildOrderNumber(),
       user: req.user._id,
       items: normalizedItems,
-      shippingAddress,
+      shippingAddress: normalizedShippingAddress,
       paymentMethod,
       status: "Pending",
       statusHistory: {
@@ -203,13 +206,19 @@ export const createOrder = async (req, res, next) => {
         outForDeliveryAt: null,
         deliveredAt: null
       },
-      orderStatus: "processing",
+      orderStatus: "pending",
       subtotal,
       deliveryFee,
       totalAmount: totalPrice
     });
 
     console.log("[createOrder] Order created successfully:", order._id);
+
+    try {
+      await syncUserAddressFromOrder(req.user._id, normalizedShippingAddress);
+    } catch (profileSyncError) {
+      console.warn("[createOrder] Failed to sync user address from order:", profileSyncError.message);
+    }
 
     res.status(201).json({
       ...order.toObject(),
@@ -235,6 +244,32 @@ export const getOrders = async (req, res, next) => {
 
     const orders = await query;
 
+    // Normalize legacy statuses and ensure statusHistory has pendingAt
+    orders.forEach((order) => {
+      try {
+        if (String(order.status) === "Processing") {
+          order.status = "Pending";
+        }
+
+        if (String(order.orderStatus).toLowerCase() === "processing") {
+          order.orderStatus = "pending";
+        }
+
+        if (!order.statusHistory || typeof order.statusHistory !== "object") {
+          order.statusHistory = {
+            pendingAt: order.createdAt || null,
+            packedAt: null,
+            outForDeliveryAt: null,
+            deliveredAt: null
+          };
+        } else if (!order.statusHistory.pendingAt) {
+          order.statusHistory.pendingAt = order.createdAt || null;
+        }
+      } catch (err) {
+        // ignore normalization failures per-order
+      }
+    });
+
     res.status(200).json(orders);
   } catch (error) {
     next(error);
@@ -246,6 +281,29 @@ export const getMyOrders = async (req, res, next) => {
     const orders = await Order.find({ user: req.user._id })
       .populate("items.product", "name image price")
       .sort({ createdAt: -1 });
+
+    orders.forEach((order) => {
+      try {
+        if (String(order.status) === "Processing") {
+          order.status = "Pending";
+        }
+
+        if (String(order.orderStatus).toLowerCase() === "processing") {
+          order.orderStatus = "pending";
+        }
+
+        if (!order.statusHistory || typeof order.statusHistory !== "object") {
+          order.statusHistory = {
+            pendingAt: order.createdAt || null,
+            packedAt: null,
+            outForDeliveryAt: null,
+            deliveredAt: null
+          };
+        } else if (!order.statusHistory.pendingAt) {
+          order.statusHistory.pendingAt = order.createdAt || null;
+        }
+      } catch (err) {}
+    });
 
     res.status(200).json(orders);
   } catch (error) {
@@ -274,6 +332,30 @@ export const getOrderById = async (req, res, next) => {
 
     if (orderUserId !== loggedInUserId && req.user?.role !== "admin") {
       return res.status(403).json({ message: "Forbidden" });
+    }
+
+    // Normalize legacy statuses and ensure statusHistory has pendingAt
+    try {
+      if (String(order.status) === "Processing") {
+        order.status = "Pending";
+      }
+
+      if (String(order.orderStatus).toLowerCase() === "processing") {
+        order.orderStatus = "pending";
+      }
+
+      if (!order.statusHistory || typeof order.statusHistory !== "object") {
+        order.statusHistory = {
+          pendingAt: order.createdAt || null,
+          packedAt: null,
+          outForDeliveryAt: null,
+          deliveredAt: null
+        };
+      } else if (!order.statusHistory.pendingAt) {
+        order.statusHistory.pendingAt = order.createdAt || null;
+      }
+    } catch (err) {
+      // ignore
     }
 
     res.status(200).json(order);
