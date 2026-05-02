@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { nanoid } from "nanoid";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
-import { normalizeShippingAddress, syncUserAddressFromOrder } from "../utils/userProfile.js";
+import { normalizeAddressInput as normalizeShippingAddress, syncUserAddressFromOrder } from "../utils/userProfile.js";
 
 const buildOrderNumber = () => `ORD-${nanoid(10)}`;
 
