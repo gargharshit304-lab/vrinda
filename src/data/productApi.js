@@ -1,19 +1,58 @@
 import { apiRequest } from "./apiClient";
 import { getAuthToken } from "./authStorage";
-import { ADMIN_PRODUCTS_KEY, normalizeCatalogProduct } from "./productCatalog";
+import { readAdminProducts, normalizeCatalogProduct } from "./productCatalog";
 
-const readStoredProducts = () => {
-  if (typeof window === "undefined") {
-    return [];
+const normalizeApiProduct = (product) => {
+  if (!product || typeof product !== "object") {
+    return null;
   }
 
-  try {
-    const raw = window.localStorage.getItem(ADMIN_PRODUCTS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+  const id = String(product.id || product._id || "");
+  if (!id) {
+    return null;
   }
+
+  return {
+    ...product,
+    id,
+    _id: product._id || id,
+    image: product.image || product.images?.[0] || "",
+    images: Array.isArray(product.images) ? product.images.filter(Boolean) : product.image ? [product.image] : [],
+    status: product.status || "active"
+  };
+};
+
+const normalizeProductForShop = (product) => {
+  if (!product) {
+    return null;
+  }
+
+  const normalized = product._id || product.id ? normalizeApiProduct(product) : normalizeCatalogProduct(product);
+  if (!normalized || !normalized.id) {
+    return null;
+  }
+
+  const status = String(normalized.status || "active").toLowerCase();
+  const isDeleted = normalized.isDeleted === true;
+
+  if (status === "inactive" || isDeleted) {
+    return null;
+  }
+
+  return normalized;
+};
+
+const mergeUniqueProducts = (primaryProducts, fallbackProducts) => {
+  const map = new Map();
+
+  [...primaryProducts, ...fallbackProducts].forEach((product) => {
+    const normalized = normalizeProductForShop(product);
+    if (normalized && !map.has(normalized.id)) {
+      map.set(normalized.id, normalized);
+    }
+  });
+
+  return Array.from(map.values());
 };
 
 export const fetchProducts = async (search = "") => {
@@ -22,7 +61,10 @@ export const fetchProducts = async (search = "") => {
     console.log("[fetchProducts] Fetching from /api/products...");
     const data = await apiRequest("/products", { method: "GET" });
     console.log("[fetchProducts] API response:", data);
-    const products = Array.isArray(data) ? data : [];
+    const backendProducts = Array.isArray(data) ? data : [];
+    const products = backendProducts.length > 0
+      ? backendProducts.map(normalizeProductForShop).filter(Boolean)
+      : mergeUniqueProducts(readAdminProducts(), []);
 
     // If search query is provided, filter products
     const normalizedQuery = search.trim().toLowerCase();
@@ -36,21 +78,9 @@ export const fetchProducts = async (search = "") => {
         .some((value) => String(value).toLowerCase().includes(normalizedQuery));
     });
   } catch (error) {
-    // Fallback to localStorage if API call fails
     console.error("[fetchProducts] API call failed:", error.message);
-    console.warn("[fetchProducts] Falling back to localStorage");
-    const products = readStoredProducts().map(normalizeCatalogProduct).filter((item) => item.id);
-
-    const normalizedQuery = search.trim().toLowerCase();
-    if (!normalizedQuery) {
-      return products;
-    }
-
-    return products.filter((product) => {
-      return [product.name, product.category, product.tagline, product.description]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(normalizedQuery));
-    });
+    const localProducts = readAdminProducts();
+    return mergeUniqueProducts(localProducts, []);
   }
 };
 
@@ -64,12 +94,11 @@ export const fetchProductById = async (productId) => {
     const data = await apiRequest(`/products/${encodeURIComponent(productId)}`, {
       method: "GET"
     });
-    return data || null;
+    return normalizeProductForShop(data);
   } catch (error) {
-    // Fallback to localStorage if API call fails
-    console.warn(`[fetchProductById] API call failed for ${productId}, falling back to localStorage:`, error.message);
-    const products = readStoredProducts().map(normalizeCatalogProduct).filter((item) => item.id);
-    return products.find((product) => product.id === String(productId)) || null;
+    console.warn(`[fetchProductById] API call failed for ${productId}:`, error.message);
+    const localProducts = readAdminProducts();
+    return normalizeProductForShop(localProducts.find((product) => String(product.id) === String(productId))) || null;
   }
 };
 

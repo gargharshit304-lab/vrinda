@@ -6,8 +6,10 @@ import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
+import cartRoutes from "./routes/cartRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
+import couponRoutes from "./routes/couponRoutes.js";
 import passport from "passport";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 
@@ -21,6 +23,14 @@ const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+if (isDevelopment) {
+  ["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://127.0.0.1:5173", "http://127.0.0.1:5174", "http://127.0.0.1:5175"].forEach((origin) => {
+    if (!allowedOrigins.includes(origin)) {
+      allowedOrigins.push(origin);
+    }
+  });
+}
 
 if (isDevelopment) {
   // eslint-disable-next-line no-console
@@ -54,15 +64,19 @@ app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/contact", contactRoutes);
+app.use("/api/coupons", couponRoutes);
 
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/user", userRoutes);
 app.use("/api/v1/products", productRoutes);
+app.use("/api/v1/cart", cartRoutes);
 app.use("/api/v1/orders", orderRoutes);
 app.use("/api/v1/contact", contactRoutes);
+app.use("/api/v1/coupons", couponRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
+import { apiRequest } from "../data/apiClient";
 import { fetchProducts as fetchProductsApi } from "../data/productApi";
 import { ADMIN_PRODUCTS_KEY } from "../data/productCatalog";
 import { addToCart, getCartItems, removeCartItem, updateCartItemQuantity } from "../data/cartStorage";
 import { getAuthToken } from "../data/authStorage";
 import { getWishlistItems, toggleWishlistItem } from "../data/wishlistStorage";
+import { showToast } from "../data/toastEvents";
 
 const sortOptions = [
   { value: "popular", label: "Popular" },
@@ -187,20 +189,37 @@ export default function ShopPage() {
 
   const wishlistIdSet = useMemo(() => new Set(wishlistItems.map((item) => item.id)), [wishlistItems]);
 
-  const handleIncrement = (product) => {
+  const handleIncrement = async (product) => {
     if (isAdminUser) {
       return;
     }
+
+    const productId = product.id || product._id || "";
+    console.log("Adding to cart:", productId);
 
     if (!getAuthToken()) {
       addToCart(product, 1);
       return;
     }
 
-    addToCart(product, 1);
-    setLastChangedProductId(product.id);
-    setTimeout(() => setLastChangedProductId((current) => (current === product.id ? "" : current)), 280);
-    setCartItems(getCartItems());
+    try {
+      await apiRequest("/cart", {
+        method: "POST",
+        auth: true,
+        body: {
+          productId,
+          quantity: 1
+        }
+      });
+
+      addToCart(product, 1);
+      setLastChangedProductId(productId);
+      setTimeout(() => setLastChangedProductId((current) => (current === productId ? "" : current)), 280);
+      setCartItems(getCartItems());
+    } catch (error) {
+      console.error("Failed to add to cart:", error);
+      showToast(error.message || "Failed to add to cart", "error");
+    }
   };
 
   const handleDecrement = (product) => {
@@ -208,14 +227,15 @@ export default function ShopPage() {
       return;
     }
 
-    const currentQuantity = cartQuantityById[product.id] || 0;
+    const productId = product.id || product._id || "";
+    const currentQuantity = cartQuantityById[productId] || 0;
     if (currentQuantity <= 1) {
-      removeCartItem(product.id);
+      removeCartItem(productId);
     } else {
-      updateCartItemQuantity(product.id, currentQuantity - 1);
+      updateCartItemQuantity(productId, currentQuantity - 1);
     }
-    setLastChangedProductId(product.id);
-    setTimeout(() => setLastChangedProductId((current) => (current === product.id ? "" : current)), 280);
+    setLastChangedProductId(productId);
+    setTimeout(() => setLastChangedProductId((current) => (current === productId ? "" : current)), 280);
     setCartItems(getCartItems());
   };
 
@@ -419,9 +439,9 @@ export default function ShopPage() {
                               ? "border-rose-300 text-rose-600"
                               : "border-sage-200 text-sage-700"
                           } ${lastHeartProductId === product.id ? "wishlist-heart-pop" : ""}`}
-                          aria-label={wishlistIdSet.has(product.id) ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
+                          aria-label={wishlistIdSet.has(product.id || product._id) ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
                         >
-                          <HeartIcon filled={wishlistIdSet.has(product.id)} />
+                              <HeartIcon filled={wishlistIdSet.has(product.id || product._id)} />
                         </button>
 
                         <img
@@ -452,8 +472,8 @@ export default function ShopPage() {
                           <span className="font-bold text-sage-700">{formatInr(getEffectivePrice(product))}</span>
                           {isAdminUser ? (
                             <span className="text-right text-xs font-semibold text-sage-700">Admin accounts cannot purchase products</span>
-                          ) : cartQuantityById[product.id] > 0 ? (
-                            <div className={`inline-flex items-center rounded-full border border-sage-200/80 bg-[#f8f5ee] p-1 shadow-sm ${lastChangedProductId === product.id ? "cart-stepper-pop" : ""}`}>
+                          ) : cartQuantityById[product.id || product._id] > 0 ? (
+                            <div className={`inline-flex items-center rounded-full border border-sage-200/80 bg-[#f8f5ee] p-1 shadow-sm ${lastChangedProductId === (product.id || product._id) ? "cart-stepper-pop" : ""}`}>
                               <button
                                 type="button"
                                 onClick={(event) => {
@@ -466,7 +486,7 @@ export default function ShopPage() {
                                 -
                               </button>
                               <span className="min-w-8 px-2 text-center text-sm font-extrabold text-sage-800">
-                                {cartQuantityById[product.id]}
+                                {cartQuantityById[product.id || product._id]}
                               </span>
                               <button
                                 type="button"
@@ -488,7 +508,7 @@ export default function ShopPage() {
                                 handleIncrement(product);
                               }}
                               className={`rounded-full bg-sage-700 px-4 py-2 text-xs font-extrabold text-white shadow-[0_8px_16px_rgba(31,61,43,0.18)] transition duration-300 hover:-translate-y-0.5 hover:bg-sage-800 ${
-                                lastChangedProductId === product.id ? "cart-stepper-pop" : ""
+                                lastChangedProductId === (product.id || product._id) ? "cart-stepper-pop" : ""
                               }`}
                             >
                               Add to Cart
@@ -579,7 +599,7 @@ export default function ShopPage() {
                     type="button"
                     onClick={() => {
                       closeQuickView();
-                      navigate(`/product/${quickViewProduct.id}`);
+                      navigate(`/product/${quickViewProduct.id || quickViewProduct._id}`);
                     }}
                     className="rounded-full border border-sage-200/80 bg-white px-5 py-3 text-sm font-bold text-sage-800 transition duration-300 hover:-translate-y-0.5 hover:bg-white/90"
                   >

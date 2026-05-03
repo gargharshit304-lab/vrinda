@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { nanoid } from "nanoid";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
+import Coupon from "../models/Coupon.js";
 import { normalizeAddressInput as normalizeShippingAddress, syncUserAddressFromOrder } from "../utils/userProfile.js";
 
 const buildOrderNumber = () => `ORD-${nanoid(10)}`;
@@ -79,7 +80,7 @@ export const createOrder = async (req, res, next) => {
       throw error;
     }
 
-    const { items, shippingAddress, paymentMethod = "COD" } = req.body;
+    const { items, shippingAddress, paymentMethod = "COD", couponCode, discount = 0 } = req.body;
 
     // Validate items array
     if (!Array.isArray(items) || !items.length) {
@@ -182,9 +183,14 @@ export const createOrder = async (req, res, next) => {
     }
 
     const deliveryFee = Number(process.env.DEFAULT_DELIVERY_FEE) || 0;
-    const totalPrice = subtotal + deliveryFee;
+    const subtotalBeforeDiscount = subtotal + deliveryFee;
+    
+    // Validate discount
+    const validatedDiscount = Math.max(0, Math.min(discount || 0, subtotalBeforeDiscount));
+    
+    const totalPrice = subtotalBeforeDiscount - validatedDiscount;
 
-    console.log("[createOrder] Validation passed. Creating order with totals:", { subtotal, deliveryFee, totalPrice });
+    console.log("[createOrder] Validation passed. Creating order with totals:", { subtotal, deliveryFee, discount: validatedDiscount, totalPrice });
 
     if (totalPrice <= 0) {
       console.log("[createOrder] Validation failed: Total price is not positive");
@@ -199,6 +205,8 @@ export const createOrder = async (req, res, next) => {
       items: normalizedItems,
       shippingAddress: normalizedShippingAddress,
       paymentMethod,
+      couponCode: couponCode ? couponCode.toUpperCase() : null,
+      discount: validatedDiscount,
       status: "Pending",
       statusHistory: {
         pendingAt: new Date(),
@@ -213,6 +221,21 @@ export const createOrder = async (req, res, next) => {
     });
 
     console.log("[createOrder] Order created successfully:", order._id);
+
+    // Increment coupon usage if applied
+    if (couponCode) {
+      try {
+        await Coupon.findOneAndUpdate(
+          { code: couponCode.toUpperCase() },
+          { $inc: { usedCount: 1 } },
+          { new: true }
+        );
+        console.log("[createOrder] Coupon usage incremented for:", couponCode);
+      } catch (couponError) {
+        console.warn("[createOrder] Failed to update coupon usage:", couponError.message);
+        // Don't fail the order if coupon update fails
+      }
+    }
 
     try {
       await syncUserAddressFromOrder(req.user._id, normalizedShippingAddress);

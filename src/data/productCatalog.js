@@ -171,6 +171,8 @@ export const normalizeCatalogProduct = (product) => {
 
   return {
     id: String(product?.id || ""),
+    status: String(product?.status || "active"),
+    isDeleted: Boolean(product?.isDeleted),
     name: String(product?.name || "Unnamed Product"),
     category: String(product?.category || "Bath & Body"),
     price: Number(product?.price) || 0,

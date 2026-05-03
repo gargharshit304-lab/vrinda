@@ -14,6 +14,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import AdminContactMessages from "./AdminContactMessages";
 import AdminInventory from "./AdminInventory";
+import AdminCouponsPage from "./AdminCouponsPage";
 import { ADMIN_PRODUCTS_KEY, makeProductId, normalizeCatalogProduct } from "../data/productCatalog";
 import { apiRequest } from "../data/apiClient";
 import { fetchOrders as fetchAdminOrders } from "../data/orderApi";
@@ -32,6 +33,7 @@ const sections = [
   { key: "overview", label: "Overview", icon: "M3 12l9-8 9 8M5 10v10h14V10" },
   { key: "products", label: "Product Management", icon: "M21 8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8M8 6V4h8v2M3 12h18" },
   { key: "inventory", label: "Inventory", icon: "M9 3H5a2 2 0 0 0-2 2v4h4V3zm11 0h-4v4h4V3zM9 11H5v4h4v-4zm11 0h-4v4h4v-4zM9 19H5a2 2 0 0 0 2 2h2v-2zm11 0h-4v2h2a2 2 0 0 0 2-2z" },
+  { key: "coupons", label: "Coupons", icon: "M4 4h16v3H4zM4 9h16v8H4zM6 13h12M6 17h8M20 6v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6" },
   { key: "orders", label: "Pending Orders", icon: "M3 4h18v17H3zM8 2v4M16 2v4M7 11h10M7 15h6" },
   { key: "analytics", label: "Analytics", icon: "M4 20V10M10 20V4M16 20v-7M22 20v-11" },
   { key: "contacts", label: "Contact Messages", icon: "M21 8v13H3V8M7 3h10l1 5H6l1-5z" },
@@ -783,6 +785,9 @@ export default function AdminPage() {
     }
 
     const nextProducts = products.filter((product) => product.id !== id);
+    const cachedProducts = readStore(STORAGE_KEYS.products).filter((product) => String(product?.id || product?._id || "") !== String(id));
+
+    localStorage.setItem(STORAGE_KEYS.products, JSON.stringify(cachedProducts));
     persist(nextProducts, orders);
     window.dispatchEvent(new Event("vrinda-products-changed"));
     setProductStatus("Product deleted successfully.");
@@ -1363,6 +1368,8 @@ export default function AdminPage() {
           )}
 
           {activeSection === "inventory" && <AdminInventory products={products} />}
+
+          {activeSection === "coupons" && <AdminCouponsPage />}
 
           {activeSection === "orders" && (
             <section className="glass-card p-5">

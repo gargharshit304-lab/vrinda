@@ -5,7 +5,15 @@ const isDevelopment = process.env.NODE_ENV !== "production";
 export const getProducts = async (req, res, next) => {
   try {
     const search = req.query.search?.trim();
-    const filter = search ? { name: { $regex: search, $options: "i" } } : {};
+    const filter = {
+      status: "active",
+      isDeleted: { $ne: true }
+    };
+
+    if (search) {
+      filter.name = { $regex: search, $options: "i" };
+    }
+
     const products = await Product.find(filter).sort({ createdAt: -1 });
     res.status(200).json(products);
   } catch (error) {
@@ -21,6 +29,13 @@ export const getProductById = async (req, res, next) => {
       error.statusCode = 404;
       throw error;
     }
+
+    if (product.status !== "active" || product.isDeleted === true) {
+      const error = new Error("Product not found");
+      error.statusCode = 404;
+      throw error;
+    }
+
     res.status(200).json(product);
   } catch (error) {
     next(error);
@@ -42,7 +57,8 @@ export const getSimilarProducts = async (req, res, next) => {
       category: currentProduct.category,
       _id: { $ne: currentProduct._id },
       stock: { $gt: 0 },
-      status: "active"
+      status: "active",
+      isDeleted: { $ne: true }
     })
       .select("name price image category")
       .limit(10)
