@@ -501,18 +501,35 @@ export default function ShopPage() {
                               </button>
                             </div>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleIncrement(product);
-                              }}
-                              className={`rounded-full bg-sage-700 px-4 py-2 text-xs font-extrabold text-white shadow-[0_8px_16px_rgba(31,61,43,0.18)] transition duration-300 hover:-translate-y-0.5 hover:bg-sage-800 ${
-                                lastChangedProductId === (product.id || product._id) ? "cart-stepper-pop" : ""
-                              }`}
-                            >
-                              Add to Cart
-                            </button>
+                            (() => {
+                              const stock = Number(product.stock || product.unitsAvailable || 0);
+                              if (stock > 0) {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      handleIncrement(product);
+                                    }}
+                                    className={`rounded-full bg-sage-700 px-4 py-2 text-xs font-extrabold text-white shadow-[0_8px_16px_rgba(31,61,43,0.18)] transition duration-300 hover:-translate-y-0.5 hover:bg-sage-800 ${
+                                      lastChangedProductId === (product.id || product._id) ? "cart-stepper-pop" : ""
+                                    }`}
+                                  >
+                                    Add to Cart
+                                  </button>
+                                );
+                              }
+
+                              return (
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="rounded-full bg-gray-200 px-4 py-2 text-xs font-extrabold text-slate-500 shadow-sm cursor-not-allowed"
+                                >
+                                  Out of Stock
+                                </button>
+                              );
+                            })()
                           )}
                         </div>
                       </div>

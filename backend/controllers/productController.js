@@ -6,8 +6,8 @@ export const getProducts = async (req, res, next) => {
   try {
     const search = req.query.search?.trim();
     const filter = {
-      status: "active",
-      isDeleted: { $ne: true }
+      isDeleted: false,
+      isActive: true
     };
 
     if (search) {
@@ -30,7 +30,7 @@ export const getProductById = async (req, res, next) => {
       throw error;
     }
 
-    if (product.status !== "active" || product.isDeleted === true) {
+    if (product.isDeleted === true || product.isActive === false) {
       const error = new Error("Product not found");
       error.statusCode = 404;
       throw error;
@@ -134,6 +134,8 @@ export const createProduct = async (req, res, next) => {
       type: body.type || "",
       price,
       stock: stock ?? 0,
+      isDeleted: false,
+      isActive: true,
       description: description ?? "",
       image: mainImageUrl || additionalImageUrls[0] || "",
       images: [mainImageUrl, ...additionalImageUrls].filter(Boolean)
@@ -155,9 +157,15 @@ export const deleteProduct = async (req, res, next) => {
       throw error;
     }
 
-    await Product.findByIdAndDelete(req.params.id);
+    // Soft-delete: mark as deleted and inactive so it is excluded from shop queries
+    product.isDeleted = true;
+    product.isActive = false;
+    // Optionally also flip status if older code relies on it
+    if (product.status) product.status = "inactive";
 
-    res.json({ message: "Product deleted successfully" });
+    await product.save();
+
+    res.json({ message: "Product soft-deleted successfully" });
   } catch (error) {
     next(error);
   }
