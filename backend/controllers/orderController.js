@@ -82,6 +82,14 @@ export const createOrder = async (req, res, next) => {
 
     const { items, shippingAddress, paymentMethod = "COD", couponCode, discount = 0 } = req.body;
 
+    // Log payment method explicitly for debugging
+    console.log("[createOrder] PAYMENT METHOD:", paymentMethod);
+
+    // Normalize payment method to canonical uppercase token expected by schema
+    const normalizedPaymentMethod = String(paymentMethod || "").trim().toUpperCase();
+    const allowedPaymentMethods = new Set(["COD", "FAKE_UPI", "RAZORPAY", "ONLINE"]);
+    const finalPaymentMethod = allowedPaymentMethods.has(normalizedPaymentMethod) ? normalizedPaymentMethod : "COD";
+
     // Validate items array
     if (!Array.isArray(items) || !items.length) {
       console.log("[createOrder] Validation failed: Items array is empty or not an array");
@@ -204,7 +212,7 @@ export const createOrder = async (req, res, next) => {
       user: req.user._id,
       items: normalizedItems,
       shippingAddress: normalizedShippingAddress,
-      paymentMethod,
+      paymentMethod: finalPaymentMethod,
       couponCode: couponCode ? couponCode.toUpperCase() : null,
       discount: validatedDiscount,
       status: "Pending",

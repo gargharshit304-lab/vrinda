@@ -52,13 +52,29 @@ const orderSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
-      enum: ["COD", "FAKE_UPI"],
+      enum: ["COD", "FAKE_UPI", "RAZORPAY", "ONLINE"],
       default: "COD"
     },
     paymentStatus: {
       type: String,
       enum: ["pending", "paid", "failed"],
       default: "pending"
+    },
+    isPaid: {
+      type: Boolean,
+      default: false
+    },
+    paidAt: {
+      type: Date,
+      default: null
+    },
+    razorpayPaymentId: {
+      type: String,
+      default: null
+    },
+    razorpayOrderId: {
+      type: String,
+      default: null
     },
     status: {
       type: String,

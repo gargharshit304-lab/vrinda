@@ -10,6 +10,7 @@ import cartRoutes from "./routes/cartRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
 import couponRoutes from "./routes/couponRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
 import passport from "passport";
 import { errorHandler, notFound } from "./middleware/errorMiddleware.js";
 
@@ -68,6 +69,7 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/contact", contactRoutes);
 app.use("/api/coupons", couponRoutes);
+app.use("/api/payment", paymentRoutes);
 
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/admin", adminRoutes);
@@ -77,6 +79,7 @@ app.use("/api/v1/cart", cartRoutes);
 app.use("/api/v1/orders", orderRoutes);
 app.use("/api/v1/contact", contactRoutes);
 app.use("/api/v1/coupons", couponRoutes);
+app.use("/api/v1/payment", paymentRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
@@ -84,6 +87,9 @@ app.use(errorHandler);
 const startServer = async () => {
   try {
     await connectDB();
+    // Surface Razorpay env on startup
+    console.log("RAZORPAY_KEY_ID:", process.env.RAZORPAY_KEY_ID ? "Loaded" : "Missing");
+    console.log("RAZORPAY_KEY_SECRET:", process.env.RAZORPAY_KEY_SECRET ? "Loaded" : "Missing");
     app.listen(PORT, () => {
       if (isDevelopment) {
         // eslint-disable-next-line no-console

@@ -7,6 +7,9 @@ import { createOrderRequest } from "../data/orderApi";
 import { fetchUserProfile } from "../data/userApi";
 import { getAuthToken } from "../data/authStorage";
 import { applyCouponRequest, getPublicCouponsRequest } from "../data/couponApi";
+import { createRazorpayOrder, verifyRazorpayPayment } from "../data/paymentApi";
+import loadRazorpayScript from "../utils/loadRazorpay";
+import { showToast } from "../data/toastEvents";
 
 const deliveryFee = 49;
 
@@ -48,6 +51,7 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const [cartItems, setCartItems] = useState(() => getCartItems());
   const [formData, setFormData] = useState(initialForm);
+  const [paymentMethod, setPaymentMethod] = useState("COD");
   const [errors, setErrors] = useState({});
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -312,11 +316,11 @@ export default function CheckoutPage() {
     }
 
     if (step === 2) {
-      if (!formData.paymentMethod) {
+      if (!paymentMethod) {
         nextErrors.paymentMethod = "Please select a payment method.";
       }
 
-      if (formData.paymentMethod === "upi" && !formData.upiId.trim()) {
+      if (paymentMethod === "FAKE_UPI" && !formData.upiId.trim()) {
         nextErrors.upiId = "Please enter a UPI ID.";
       }
     }
@@ -372,6 +376,8 @@ export default function CheckoutPage() {
       setIsSubmitting(true);
 
       const shippingAddress = buildShippingAddress();
+      console.log("Selected payment method:", paymentMethod);
+
       const orderPayload = {
         items: cartItems.map((item) => ({
           productId: item.productId || item.id,
@@ -379,11 +385,126 @@ export default function CheckoutPage() {
           price: Number(item.price || 0)
         })),
         shippingAddress,
-        paymentMethod: formData.paymentMethod === "upi" ? "FAKE_UPI" : "COD",
+        paymentMethod: paymentMethod,
         couponCode: appliedCouponCode,
         discount: appliedDiscount
       };
 
+      // If online payment via Razorpay selected, we create the order first, then open Razorpay checkout
+      if (paymentMethod === "RAZORPAY") {
+        const apiOrder = await createOrderRequest(orderPayload);
+
+        const mongoOrderId = apiOrder?._id || apiOrder?.id || apiOrder?.orderNumber;
+        const amountToPay = Number(apiOrder?.totalAmount) || finalTotal;
+
+        console.log("Creating Razorpay order");
+
+        // Create Razorpay order on backend
+        let razorOrder;
+        try {
+          console.log("[checkout] Creating backend order for Razorpay", { amountToPay, mongoOrderId });
+          razorOrder = await createRazorpayOrder(amountToPay, mongoOrderId);
+          console.log("[checkout] createRazorpayOrder response:", razorOrder);
+        } catch (err) {
+          console.error("[checkout] createRazorpayOrder failed:", err);
+          showToast(err?.message || "Failed to create payment order on server", "error");
+          return;
+        }
+
+        const loaded = await loadRazorpayScript();
+        if (!loaded && !window.Razorpay) {
+          console.error("[checkout] Razorpay SDK failed to load");
+          showToast("Unable to load payment gateway. Try again later.", "error");
+          return;
+        }
+
+        // Normalize response shape
+        const rOrder = razorOrder?.order || razorOrder;
+        const rKey = razorOrder?.key || (rOrder && rOrder.key) || (window?.RAZORPAY_KEY_ID || null) || razorOrder?.id;
+
+        const options = {
+          key: rKey || razorOrder?.key,
+          amount: rOrder?.amount || razorOrder?.amount || Math.round(amountToPay * 100),
+          currency: rOrder?.currency || razorOrder?.currency || "INR",
+          order_id: rOrder?.id || razorOrder?.id,
+          name: profile?.name || formData.fullName || "Vrinda",
+          description: "Order Payment",
+          prefill: {
+            name: profile?.name || formData.fullName || "",
+            email: profile?.email || "",
+            contact: formData.phone || profile?.phone || ""
+          },
+          theme: { color: "#1f4d3f" },
+          handler: async function (response) {
+            try {
+              const verifyResp = await verifyRazorpayPayment({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                orderId: mongoOrderId
+              });
+
+              if (verifyResp && verifyResp.success) {
+                // finalize frontend state
+                const orderData = {
+                  id: apiOrder?.orderNumber || mongoOrderId,
+                  date: apiOrder?.createdAt || new Date().toISOString(),
+                  items: cartItems.map((item) => ({
+                    id: item.productId || item.id,
+                    name: item.name,
+                    price: Number(item.price || 0),
+                    quantity: Number(item.quantity || 0)
+                  })),
+                  total: Number(apiOrder?.totalAmount) || amountToPay,
+                  discount: appliedDiscount,
+                  couponCode: appliedCouponCode,
+                  status: "Pending",
+                  paymentMethod: "Razorpay",
+                  deliveryInfo: "Expected delivery in 3-5 business days",
+                  shippingAddress
+                };
+
+                addOrder(orderData);
+                clearCart();
+                setCartItems([]);
+                setFormData(initialForm);
+                setErrors({});
+
+                showToast("Payment successful", "success");
+                navigate("/order-confirmation", { state: { order: orderData } });
+              } else {
+                showToast("Payment verification failed", "error");
+              }
+            } catch (err) {
+              console.error("Payment verify error:", err);
+              showToast(err?.message || "Payment verification failed", "error");
+            }
+          }
+        };
+
+        try {
+          if (!window.Razorpay) {
+            console.warn("[checkout] window.Razorpay not found even after loading SDK");
+            showToast("Payment gateway unavailable. Try again later.", "error");
+            return;
+          }
+
+          console.log("[checkout] Initializing Razorpay popup", options);
+          const rzp = new window.Razorpay(options);
+          rzp.on("payment.failed", function (response) {
+            console.error("Razorpay payment failed:", response);
+            showToast("Payment failed", "error");
+          });
+
+          rzp.open();
+        } catch (popupErr) {
+          console.error("[checkout] Razorpay popup error:", popupErr);
+          showToast(popupErr?.message || "Unable to open payment popup", "error");
+        }
+        return;
+      }
+
+      // Existing non-online payment flow (COD / Fake UPI)
       const apiOrder = await createOrderRequest(orderPayload);
 
       const orderData = {
@@ -682,9 +803,9 @@ export default function CheckoutPage() {
                     <input
                       type="radio"
                       name="paymentMethod"
-                      value="cod"
-                      checked={formData.paymentMethod === "cod"}
-                      onChange={handleChange}
+                      value="COD"
+                      checked={paymentMethod === "COD"}
+                      onChange={() => setPaymentMethod("COD")}
                       className="mt-1"
                     />
                     <div>
@@ -697,9 +818,9 @@ export default function CheckoutPage() {
                     <input
                       type="radio"
                       name="paymentMethod"
-                      value="upi"
-                      checked={formData.paymentMethod === "upi"}
-                      onChange={handleChange}
+                      value="FAKE_UPI"
+                      checked={paymentMethod === "FAKE_UPI"}
+                      onChange={() => setPaymentMethod("FAKE_UPI")}
                       className="mt-1"
                     />
                     <div>
@@ -708,7 +829,22 @@ export default function CheckoutPage() {
                     </div>
                   </label>
 
-                  {formData.paymentMethod === "upi" ? (
+                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-sage-200/80 bg-white/85 p-4 transition hover:border-sage-300">
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="RAZORPAY"
+                      checked={paymentMethod === "RAZORPAY"}
+                      onChange={() => setPaymentMethod("RAZORPAY")}
+                      className="mt-1"
+                    />
+                    <div>
+                      <p className="text-sm font-bold text-sage-800">Online Payment (Razorpay)</p>
+                      <p className="text-xs text-sage-700">Pay securely using Razorpay checkout.</p>
+                    </div>
+                  </label>
+
+                  {paymentMethod === "FAKE_UPI" ? (
                     <Field
                       label="UPI ID"
                       name="upiId"
@@ -737,9 +873,9 @@ export default function CheckoutPage() {
                 <section className="rounded-2xl border border-sage-200/80 bg-white/85 p-4">
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-sage-700/75">Payment</p>
                   <p className="mt-1 text-sm font-semibold text-sage-800">
-                    {formData.paymentMethod === "upi" ? "Fake UPI" : "Cash on Delivery"}
+                    {paymentMethod === "FAKE_UPI" ? "Fake UPI" : paymentMethod === "RAZORPAY" ? "Online Payment (Razorpay)" : "Cash on Delivery"}
                   </p>
-                  {formData.paymentMethod === "upi" ? <p className="text-sm text-sage-700">UPI ID: {formData.upiId}</p> : null}
+                  {paymentMethod === "FAKE_UPI" ? <p className="text-sm text-sage-700">UPI ID: {formData.upiId}</p> : null}
                 </section>
 
                 <section className="rounded-2xl border border-sage-200/80 bg-white/85 p-4">
