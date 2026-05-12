@@ -4,72 +4,110 @@ import Order from "../models/Order.js";
 
 export const createRazorpayOrder = async (req, res, next) => {
   try {
-    console.log("[createRazorpayOrder] Incoming request", {
-      path: req.path,
-      method: req.method,
-      body: req.body && {
-        amount: req.body.amount,
-        orderId: req.body.orderId
-      }
-    });
+    console.log("[createRazorpayOrder] Incoming request:", req.body);
 
     const { amount, orderId } = req.body || {};
 
     if (!amount || !orderId) {
-      console.warn("[createRazorpayOrder] Missing amount or orderId", { amount, orderId });
-      return res.status(400).json({ message: "amount and orderId are required" });
+      return res.status(400).json({
+        success: false,
+        message: "amount and orderId are required"
+      });
     }
 
-    // Use the singleton exported from config
-    console.log("[createRazorpayOrder] Razorpay instance present:", !!razorpay);
+    // DEBUG LOGS
+    console.log("========== RAZORPAY DEBUG ==========");
+    console.log("razorpay:", razorpay);
+    console.log("typeof razorpay:", typeof razorpay);
+    console.log("razorpayKeyId:", razorpayKeyId);
+    console.log("====================================");
 
-    if (!razorpay) {
-      console.error("[createRazorpayOrder] Razorpay instance not initialized. Returning 503.");
-      return res.status(503).json({ message: "Razorpay not configured on server" });
+    // REMOVE FALSE 503 ISSUE
+    if (!razorpay || !razorpay.orders) {
+      console.error("[createRazorpayOrder] Razorpay instance invalid");
+
+      return res.status(500).json({
+        success: false,
+        message: "Razorpay instance invalid"
+      });
     }
 
     const paise = Math.round(Number(amount) * 100);
-    const options = { amount: paise, currency: "INR", receipt: `vrinda_order_${Date.now()}` };
 
-    console.log("[createRazorpayOrder] Creating Razorpay order for amount (paise):", paise);
+    const options = {
+      amount: paise,
+      currency: "INR",
+      receipt: `vrinda_order_${Date.now()}`
+    };
 
-    let rOrder;
-    try {
-      rOrder = await razorpay.orders.create(options);
-      console.log("[createRazorpayOrder] Razorpay order created", { id: rOrder.id, amount: rOrder.amount });
-    } catch (err) {
-      console.error("[createRazorpayOrder] Error creating Razorpay order:", err && err.message);
-      return res.status(500).json({ message: "Failed to create Razorpay order", error: err && err.message });
-    }
+    console.log("[createRazorpayOrder] Creating order with:", options);
 
-    return res.status(200).json({ success: true, order: rOrder, id: rOrder.id, amount: rOrder.amount, currency: rOrder.currency, key: razorpayKeyId });
+    const rOrder = await razorpay.orders.create(options);
+
+    console.log("[createRazorpayOrder] SUCCESS:", rOrder);
+
+    return res.status(200).json({
+      success: true,
+      id: rOrder.id,
+      amount: rOrder.amount,
+      currency: rOrder.currency,
+      key: razorpayKeyId,
+      order: rOrder
+    });
+
   } catch (error) {
-    console.error("[createRazorpayOrder] Error:", error && error.message);
-    next(error);
+    console.error("[createRazorpayOrder] FULL ERROR:");
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to create Razorpay order"
+    });
   }
 };
 
 export const verifyRazorpayPayment = async (req, res, next) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body || {};
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      orderId
+    } = req.body || {};
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !orderId) {
-      return res.status(400).json({ message: "Missing required fields" });
+    if (
+      !razorpay_order_id ||
+      !razorpay_payment_id ||
+      !razorpay_signature ||
+      !orderId
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields"
+      });
     }
 
     const keySecret = process.env.RAZORPAY_KEY_SECRET || "";
+
     const generatedSignature = crypto
       .createHmac("sha256", keySecret)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
     if (generatedSignature !== razorpay_signature) {
-      return res.status(400).json({ message: "Invalid signature" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid signature"
+      });
     }
 
     const order = await Order.findById(orderId);
+
     if (!order) {
-      return res.status(404).json({ message: "Order not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
     }
 
     order.paymentStatus = "paid";
@@ -81,8 +119,18 @@ export const verifyRazorpayPayment = async (req, res, next) => {
 
     await order.save();
 
-    return res.status(200).json({ success: true, message: "Payment verified", order });
+    return res.status(200).json({
+      success: true,
+      message: "Payment verified",
+      order
+    });
+
   } catch (error) {
-    next(error);
+    console.error("[verifyRazorpayPayment] ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Payment verification failed"
+    });
   }
 };
