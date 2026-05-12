@@ -7,7 +7,7 @@ import { createOrderRequest } from "../data/orderApi";
 import { fetchUserProfile } from "../data/userApi";
 import { getAuthToken } from "../data/authStorage";
 import { applyCouponRequest, getPublicCouponsRequest } from "../data/couponApi";
-import { createRazorpayOrder, verifyRazorpayPayment } from "../data/paymentApi";
+import { createRazorpayOrder, reportRazorpayPaymentFailure, verifyRazorpayPayment } from "../data/paymentApi";
 import loadRazorpayScript from "../utils/loadRazorpay";
 import { showToast } from "../data/toastEvents";
 
@@ -434,6 +434,20 @@ export default function CheckoutPage() {
             email: profile?.email || "",
             contact: formData.phone || profile?.phone || ""
           },
+          modal: {
+            ondismiss: async function () {
+              try {
+                console.log("Payment popup closed");
+                await reportRazorpayPaymentFailure({
+                  orderId: mongoOrderId,
+                  reason: "cancelled_by_user"
+                });
+                showToast("Payment cancelled", "error");
+              } catch (dismissErr) {
+                console.error("[checkout] Failed to report popup dismissal:", dismissErr);
+              }
+            }
+          },
           theme: { color: "#1f4d3f" },
           handler: async function (response) {
             try {
@@ -491,8 +505,16 @@ export default function CheckoutPage() {
 
           console.log("[checkout] Initializing Razorpay popup", options);
           const rzp = new window.Razorpay(options);
-          rzp.on("payment.failed", function (response) {
+          rzp.on("payment.failed", async function (response) {
             console.error("Razorpay payment failed:", response);
+            try {
+              await reportRazorpayPaymentFailure({
+                orderId: mongoOrderId,
+                reason: response?.error?.description || response?.error?.reason || "payment_failed"
+              });
+            } catch (reportErr) {
+              console.error("[checkout] Failed to report payment failure:", reportErr);
+            }
             showToast("Payment failed", "error");
           });
 

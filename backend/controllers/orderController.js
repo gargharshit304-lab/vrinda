@@ -207,12 +207,16 @@ export const createOrder = async (req, res, next) => {
       throw error;
     }
 
+    const isRazorpayOrder = finalPaymentMethod === "RAZORPAY";
+
     const order = await Order.create({
       orderNumber: buildOrderNumber(),
       user: req.user._id,
       items: normalizedItems,
       shippingAddress: normalizedShippingAddress,
       paymentMethod: finalPaymentMethod,
+      paymentStatus: isRazorpayOrder ? "pending" : "pending",
+      isPaid: false,
       couponCode: couponCode ? couponCode.toUpperCase() : null,
       discount: validatedDiscount,
       status: "Pending",

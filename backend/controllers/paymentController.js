@@ -113,6 +113,7 @@ export const verifyRazorpayPayment = async (req, res, next) => {
     order.paymentStatus = "paid";
     order.isPaid = true;
     order.paidAt = new Date();
+    order.orderStatus = "confirmed";
     order.razorpayPaymentId = razorpay_payment_id;
     order.razorpayOrderId = razorpay_order_id;
     order.paymentMethod = "RAZORPAY";
@@ -131,6 +132,50 @@ export const verifyRazorpayPayment = async (req, res, next) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Payment verification failed"
+    });
+  }
+};
+
+export const markRazorpayPaymentFailure = async (req, res) => {
+  try {
+    const { orderId, reason } = req.body || {};
+
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: "orderId is required"
+      });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
+
+    // Keep order record for audit but mark payment as failed
+    order.paymentStatus = "failed";
+    order.isPaid = false;
+    order.orderStatus = "payment_failed";
+
+    if (!order.razorpayPaymentId && reason) {
+      order.razorpayPaymentId = String(reason).slice(0, 100);
+    }
+
+    await order.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment marked as failed",
+      order
+    });
+  } catch (error) {
+    console.error("[markRazorpayPaymentFailure] ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to mark payment failure"
     });
   }
 };

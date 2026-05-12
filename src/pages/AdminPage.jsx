@@ -86,12 +86,42 @@ const getOrderAmount = (order) => Number(order?.totalPrice ?? order?.totalAmount
 
 const getOrderStatus = (order) => String(order?.status || order?.orderStatus || "pending");
 
+const getPaymentStatusValue = (order) => String(order?.paymentStatus || "pending").toLowerCase();
+
+const getPaymentStatusLabel = (order) => {
+  const paymentStatus = getPaymentStatusValue(order);
+  if (paymentStatus === "paid") {
+    return "Paid";
+  }
+  if (paymentStatus === "failed") {
+    return "Failed";
+  }
+  return "Pending";
+};
+
+const getPaymentBadgeClass = (order) => {
+  const paymentStatus = getPaymentStatusValue(order);
+  if (paymentStatus === "paid") {
+    return "bg-emerald-100 text-emerald-700";
+  }
+  if (paymentStatus === "failed") {
+    return "bg-rose-100 text-rose-700";
+  }
+  return "bg-amber-100 text-amber-700";
+};
+
 const isCompletedOrder = (order) => {
+  if (getPaymentStatusValue(order) === "failed") {
+    return false;
+  }
   const status = getOrderStatus(order).toLowerCase();
   return status === "completed" || status === "delivered";
 };
 
 const isPendingOrder = (order) => {
+  if (getPaymentStatusValue(order) === "failed") {
+    return false;
+  }
   const status = getOrderStatus(order).toLowerCase();
   return status === "pending" || status === "processing" || status === "packed" || status === "shipped" || status === "out for delivery";
 };
@@ -277,6 +307,7 @@ export default function AdminPage() {
   const [filters, setFilters] = useState({
     search: "",
     status: "All",
+    payment: "All",
     date: "All",
     sort: "Newest"
   });
@@ -513,12 +544,14 @@ export default function AdminPage() {
       const orderId = String(order?._id || order?.id || order?.orderNumber || "").toLowerCase();
       const customer = getOrderCustomerName(order).toLowerCase();
       const statusLabel = getOrderStatusLabel(order);
+      const paymentLabel = getPaymentStatusLabel(order);
       const createdAt = order?.createdAt || order?.created || order?.updatedAt;
 
       const matchesSearch = !debouncedSearch || orderId.includes(debouncedSearch) || customer.includes(debouncedSearch);
       const matchesStatus = filters.status === "All" || statusLabel === filters.status;
+      const matchesPayment = filters.payment === "All" || paymentLabel === filters.payment;
 
-      return matchesSearch && matchesStatus && matchesDate(createdAt);
+      return matchesSearch && matchesStatus && matchesPayment && matchesDate(createdAt);
     });
 
     rows.sort((a, b) => {
@@ -528,7 +561,7 @@ export default function AdminPage() {
     });
 
     return rows;
-  }, [orders, filters.status, filters.date, filters.sort, debouncedSearch]);
+  }, [orders, filters.status, filters.payment, filters.date, filters.sort, debouncedSearch]);
 
   const totalOrders = analyticsData.totalOrders || orders.length;
   const totalRevenue = analyticsData.totalRevenue || revenueStats.completedRevenue || 0;
@@ -1374,7 +1407,7 @@ export default function AdminPage() {
           {activeSection === "orders" && (
             <section className="glass-card p-5">
               <h3 className="font-display text-4xl font-semibold text-sage-800">Pending Orders</h3>
-              <div className="mt-3 grid gap-3 rounded-xl border border-sage-200/80 bg-white/70 p-3 md:grid-cols-2 lg:grid-cols-4">
+              <div className="mt-3 grid gap-3 rounded-xl border border-sage-200/80 bg-white/70 p-3 md:grid-cols-2 lg:grid-cols-5">
                 <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
                   Search
                   <input
@@ -1398,6 +1431,20 @@ export default function AdminPage() {
                     <option>Packed</option>
                     <option>Out for Delivery</option>
                     <option>Delivered</option>
+                  </select>
+                </label>
+
+                <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
+                  Payment
+                  <select
+                    value={filters.payment}
+                    onChange={(event) => setFilters((old) => ({ ...old, payment: event.target.value }))}
+                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
+                  >
+                    <option>All</option>
+                    <option>Paid</option>
+                    <option>Pending</option>
+                    <option>Failed</option>
                   </select>
                 </label>
 
@@ -1438,13 +1485,14 @@ export default function AdminPage() {
                       <th className="p-3">Qty</th>
                       <th className="p-3">Amount (INR)</th>
                       <th className="p-3">Status</th>
+                      <th className="p-3">Payment</th>
                       <th className="p-3">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {!filteredOrders.length ? (
                       <tr>
-                        <td className="p-3 text-sage-600" colSpan={7}>
+                        <td className="p-3 text-sage-600" colSpan={8}>
                           No orders match the selected filters.
                         </td>
                       </tr>
@@ -1456,6 +1504,10 @@ export default function AdminPage() {
                         const amount = getOrderAmount(order);
                         const statusValue = getOrderStatusValue(order);
                         const statusLabel = getOrderStatusLabel(order);
+                        const paymentLabel = getPaymentStatusLabel(order);
+                        const paymentBadgeClass = getPaymentBadgeClass(order);
+                        const isPaymentFailed = getPaymentStatusValue(order) === "failed";
+                        const isRazorpayUnpaid = String(order?.paymentMethod || "").toUpperCase() === "RAZORPAY" && getPaymentStatusValue(order) !== "paid";
                         const isPending = statusValue === "pending";
                         const isPacked = statusValue === "packed";
                         const isOutForDelivery = statusValue === "out for delivery";
@@ -1476,13 +1528,18 @@ export default function AdminPage() {
                               </span>
                             </td>
                             <td className="p-3">
+                              <span className={`rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider ${paymentBadgeClass}`}>
+                                {paymentLabel}
+                              </span>
+                            </td>
+                            <td className="p-3">
                               <div className="flex flex-wrap gap-2">
                                 <button
                                   type="button"
                                   onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Packed")}
-                                  disabled={!isPending || updatingOrderId === (order._id || order.id || order.orderNumber)}
+                                  disabled={!isPending || isPaymentFailed || isRazorpayUnpaid || updatingOrderId === (order._id || order.id || order.orderNumber)}
                                   className={`rounded-full px-3 py-2 text-xs font-extrabold text-white transition ${
-                                    isPending && updatingOrderId !== (order._id || order.id || order.orderNumber)
+                                    isPending && !isPaymentFailed && !isRazorpayUnpaid && updatingOrderId !== (order._id || order.id || order.orderNumber)
                                       ? "bg-blue-600 hover:bg-blue-700 cursor-pointer"
                                       : "cursor-not-allowed bg-gray-300 text-gray-600"
                                   }`}
@@ -1492,9 +1549,9 @@ export default function AdminPage() {
                                 <button
                                   type="button"
                                   onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Out for Delivery")}
-                                  disabled={!isPacked || updatingOrderId === (order._id || order.id || order.orderNumber)}
+                                  disabled={!isPacked || isPaymentFailed || isRazorpayUnpaid || updatingOrderId === (order._id || order.id || order.orderNumber)}
                                   className={`rounded-full px-3 py-2 text-xs font-extrabold text-white transition ${
-                                    isPacked && updatingOrderId !== (order._id || order.id || order.orderNumber)
+                                    isPacked && !isPaymentFailed && !isRazorpayUnpaid && updatingOrderId !== (order._id || order.id || order.orderNumber)
                                       ? "bg-orange-500 hover:bg-orange-600 cursor-pointer"
                                       : "cursor-not-allowed bg-gray-300 text-gray-600"
                                   }`}
@@ -1504,9 +1561,9 @@ export default function AdminPage() {
                                 <button
                                   type="button"
                                   onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Delivered")}
-                                  disabled={!isOutForDelivery || updatingOrderId === (order._id || order.id || order.orderNumber)}
+                                  disabled={!isOutForDelivery || isPaymentFailed || isRazorpayUnpaid || updatingOrderId === (order._id || order.id || order.orderNumber)}
                                   className={`rounded-full px-3 py-2 text-xs font-extrabold text-white transition ${
-                                    isOutForDelivery && updatingOrderId !== (order._id || order.id || order.orderNumber)
+                                    isOutForDelivery && !isPaymentFailed && !isRazorpayUnpaid && updatingOrderId !== (order._id || order.id || order.orderNumber)
                                       ? "bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
                                       : "cursor-not-allowed bg-gray-300 text-gray-600"
                                   }`}
@@ -1516,6 +1573,14 @@ export default function AdminPage() {
                                 {isDelivered ? (
                                   <span className="rounded-full bg-gray-200 px-3 py-2 text-xs font-extrabold text-gray-600">
                                     All actions disabled
+                                  </span>
+                                ) : isPaymentFailed ? (
+                                  <span className="rounded-full bg-rose-100 px-3 py-2 text-xs font-extrabold text-rose-700">
+                                    Payment Failed
+                                  </span>
+                                ) : isRazorpayUnpaid ? (
+                                  <span className="rounded-full bg-amber-100 px-3 py-2 text-xs font-extrabold text-amber-700">
+                                    Awaiting Payment
                                   </span>
                                 ) : null}
                               </div>

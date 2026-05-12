@@ -15,3 +15,11 @@ export const verifyRazorpayPayment = async (payload) => {
     body: payload
   });
 };
+
+export const reportRazorpayPaymentFailure = async (payload) => {
+  return apiRequest("/payment/failure", {
+    method: "POST",
+    auth: true,
+    body: payload
+  });
+};

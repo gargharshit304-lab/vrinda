@@ -101,7 +101,7 @@ const orderSchema = new mongoose.Schema(
     },
     orderStatus: {
       type: String,
-      enum: ["processing", "pending", "packed", "shipped", "delivered", "cancelled"],
+      enum: ["processing", "pending", "packed", "shipped", "delivered", "cancelled", "confirmed", "payment_failed"],
       default: "pending"
     },
     subtotal: {
