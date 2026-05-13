@@ -1,12 +1,11 @@
 /* Scrollable Orders Table Styles */
 .orders-container {
-  max-height: 500px;
-  overflow-y: auto;
   scroll-behavior: smooth;
 }
 
 .orders-container::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 
 .orders-container::-webkit-scrollbar-track {
@@ -25,7 +24,8 @@
 .orders-table-head {
   position: sticky;
   top: 0;
-  background: white;
-  z-index: 10;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
 }

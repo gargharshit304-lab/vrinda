@@ -58,6 +58,87 @@ const applyStatusTimestamp = (order, status, timestamp = new Date()) => {
   order.statusHistory = history;
 };
 
+const buildDateRange = (month) => {
+  if (month !== "current") {
+    return null;
+  }
+
+  const start = new Date();
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 1);
+
+  return { start, end };
+};
+
+const buildOrderStatusFilter = (status) => {
+  const normalized = String(status || "").trim().toLowerCase();
+
+  if (!normalized || normalized === "all") {
+    return null;
+  }
+
+  if (normalized === "pending") {
+    return {
+      $or: [
+        { paymentStatus: "pending" },
+        { orderStatus: { $in: ["pending", "processing", "confirmed"] } },
+        { status: { $in: ["Pending"] } }
+      ]
+    };
+  }
+
+  if (normalized === "paid") {
+    return { paymentStatus: "paid" };
+  }
+
+  if (normalized === "failed") {
+    return { paymentStatus: "failed" };
+  }
+
+  if (normalized === "delivered") {
+    return {
+      $or: [{ orderStatus: "delivered" }, { status: "Delivered" }]
+    };
+  }
+
+  if (normalized === "cancelled" || normalized === "canceled") {
+    return {
+      $or: [{ orderStatus: "cancelled" }, { orderStatus: "canceled" }]
+    };
+  }
+
+  return null;
+};
+
+const buildAdminOrderFilter = ({ month, status }) => {
+  const statusFilter = buildOrderStatusFilter(status);
+
+  if (statusFilter) {
+    return statusFilter;
+  }
+
+  const monthRange = buildDateRange(month);
+  if (!monthRange) {
+    return {};
+  }
+
+  return {
+    $or: [
+      { createdAt: { $gte: monthRange.start, $lt: monthRange.end } },
+      {
+        $or: [
+          { paymentStatus: "pending" },
+          { orderStatus: { $in: ["pending", "processing", "confirmed"] } },
+          { status: { $in: ["Pending"] } }
+        ]
+      }
+    ]
+  };
+};
+
 export const createOrder = async (req, res, next) => {
   try {
     // Debug: Log incoming request
@@ -268,8 +349,10 @@ export const createOrder = async (req, res, next) => {
 export const getOrders = async (req, res, next) => {
   try {
     const isAdmin = req.user?.role === "admin";
+    const { month, status } = req.query || {};
+    const filter = isAdmin ? buildAdminOrderFilter({ month, status }) : { user: req.user._id };
 
-    let query = Order.find(isAdmin ? {} : { user: req.user._id })
+    let query = Order.find(filter)
       .populate("items.product", "name image price")
       .sort({ createdAt: -1 });
 

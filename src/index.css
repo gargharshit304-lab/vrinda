@@ -55,6 +55,10 @@
     @apply border border-emerald-300 bg-emerald-100 text-emerald-700;
   }
 
+  .status-cancelled {
+    @apply border border-rose-300 bg-rose-100 text-rose-700;
+  }
+
   .pill-btn {
     @apply rounded-full border border-sage-200/70 bg-white/85 px-5 py-2.5 text-sm font-bold text-sage-800 transition duration-300 ease-in-out hover:-translate-y-0.5 hover:shadow-md;
   }

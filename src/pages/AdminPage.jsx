@@ -15,6 +15,7 @@ import { Link, useNavigate } from "react-router-dom";
 import AdminContactMessages from "./AdminContactMessages";
 import AdminInventory from "./AdminInventory";
 import AdminCouponsPage from "./AdminCouponsPage";
+import "./AdminPage.css";
 import { ADMIN_PRODUCTS_KEY, makeProductId, normalizeCatalogProduct } from "../data/productCatalog";
 import { apiRequest } from "../data/apiClient";
 import { fetchOrders as fetchAdminOrders } from "../data/orderApi";
@@ -28,6 +29,17 @@ const STORAGE_KEYS = {
   orders: "vrinda.admin.orders"
 };
 const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
+const ORDERS_PAGE_SIZE = 12;
+
+const ORDER_VIEW_OPTIONS = [
+  { key: "current", label: "Current Month", query: { month: "current" } },
+  { key: "all", label: "All Orders", query: {} },
+  { key: "pending", label: "Pending", query: { status: "pending" } },
+  { key: "paid", label: "Paid", query: { status: "paid" } },
+  { key: "failed", label: "Failed", query: { status: "failed" } },
+  { key: "delivered", label: "Delivered", query: { status: "delivered" } },
+  { key: "cancelled", label: "Cancelled", query: { status: "cancelled" } }
+];
 
 const sections = [
   { key: "overview", label: "Overview", icon: "M3 12l9-8 9 8M5 10v10h14V10" },
@@ -88,6 +100,34 @@ const getOrderStatus = (order) => String(order?.status || order?.orderStatus || 
 
 const getPaymentStatusValue = (order) => String(order?.paymentStatus || "pending").toLowerCase();
 
+const getOrderStatusValue = (order) => {
+  const status = getOrderStatus(order).toLowerCase();
+  if (status === "processing") {
+    return "pending";
+  }
+  if (status === "shipped") {
+    return "out for delivery";
+  }
+  if (status === "completed") {
+    return "delivered";
+  }
+  return status || "pending";
+};
+
+const getOrderStatusLabel = (order) => {
+  const status = getOrderStatusValue(order);
+  if (status === "pending") {
+    return "Processing";
+  }
+  if (status === "out for delivery") {
+    return "Out for Delivery";
+  }
+  if (status === "cancelled") {
+    return "Cancelled";
+  }
+  return status.charAt(0).toUpperCase() + status.slice(1);
+};
+
 const getPaymentStatusLabel = (order) => {
   const paymentStatus = getPaymentStatusValue(order);
   if (paymentStatus === "paid") {
@@ -110,6 +150,23 @@ const getPaymentBadgeClass = (order) => {
   return "bg-amber-100 text-amber-700";
 };
 
+const getOrderBadgeClass = (order) => {
+  const status = getOrderStatusValue(order);
+  if (status === "delivered") {
+    return "bg-emerald-100 text-emerald-700";
+  }
+  if (status === "out for delivery") {
+    return "bg-orange-100 text-orange-700";
+  }
+  if (status === "packed") {
+    return "bg-sky-100 text-sky-700";
+  }
+  if (status === "cancelled") {
+    return "bg-rose-100 text-rose-700";
+  }
+  return "bg-amber-100 text-amber-700";
+};
+
 const isCompletedOrder = (order) => {
   if (getPaymentStatusValue(order) === "failed") {
     return false;
@@ -124,28 +181,6 @@ const isPendingOrder = (order) => {
   }
   const status = getOrderStatus(order).toLowerCase();
   return status === "pending" || status === "processing" || status === "packed" || status === "shipped" || status === "out for delivery";
-};
-
-const getOrderStatusValue = (order) => {
-  const status = getOrderStatus(order).toLowerCase();
-  if (status === "processing") {
-    return "pending";
-  }
-  if (status === "shipped") {
-    return "out for delivery";
-  }
-  if (status === "completed") {
-    return "delivered";
-  }
-  return status || "pending";
-};
-
-const getOrderStatusLabel = (order) => {
-  const status = getOrderStatusValue(order);
-  if (status === "out for delivery") {
-    return "Out for Delivery";
-  }
-  return status.charAt(0).toUpperCase() + status.slice(1);
 };
 
 const mapOrderStatusToApiValue = (status) => {
@@ -163,6 +198,30 @@ const mapOrderStatusToApiValue = (status) => {
     return "Delivered";
   }
   return status;
+};
+
+const formatOrderDateTime = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return { dateLabel: "-", timeLabel: "" };
+  }
+
+  return {
+    dateLabel: date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
+    }),
+    timeLabel: date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true
+    })
+  };
+};
+
+const getOrdersQueryForView = (viewKey) => {
+  return ORDER_VIEW_OPTIONS.find((option) => option.key === viewKey)?.query || {};
 };
 
 const getOrderCustomerName = (order) => String(order?.user?.name || order?.shippingAddress?.fullName || "Customer");
@@ -306,11 +365,11 @@ export default function AdminPage() {
   const [orders, setOrders] = useState([]);
   const [filters, setFilters] = useState({
     search: "",
-    status: "All",
-    payment: "All",
-    date: "All",
     sort: "Newest"
   });
+  const [ordersView, setOrdersView] = useState("current");
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [analyticsData, setAnalyticsData] = useState({
     totalOrders: 0,
@@ -358,18 +417,22 @@ export default function AdminPage() {
     navigate("/login", { replace: true });
   }, [navigate]);
 
-  useEffect(() => {
-    const loadOrders = async () => {
-      try {
-        const data = await fetchAdminOrders();
-        setOrders(data);
-      } catch (error) {
-        setOrderStatusMsg(error?.message || "Failed to load orders from the server.");
-      }
-    };
+  const loadOrders = async (viewKey = ordersView) => {
+    try {
+      setOrdersLoading(true);
+      const data = await fetchAdminOrders(getOrdersQueryForView(viewKey));
+      setOrders(Array.isArray(data) ? data : []);
+      setOrderStatusMsg("");
+    } catch (error) {
+      setOrderStatusMsg(error?.message || "Failed to load orders from the server.");
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
 
-    loadOrders();
-  }, []);
+  useEffect(() => {
+    loadOrders(ordersView);
+  }, [ordersView]);
 
   useEffect(() => {
     const loadAnalytics = async () => {
@@ -416,6 +479,10 @@ export default function AdminPage() {
 
     return () => window.clearTimeout(timeoutId);
   }, [filters.search]);
+
+  useEffect(() => {
+    setOrdersPage(1);
+  }, [ordersView, debouncedSearch, filters.sort]);
 
   const [productForm, setProductForm] = useState({
     name: "",
@@ -510,48 +577,12 @@ export default function AdminPage() {
   const pendingOrders = orders.filter((order) => isPendingOrder(order)).length;
 
   const filteredOrders = useMemo(() => {
-    const now = new Date();
-
-    const matchesDate = (orderDate) => {
-      if (filters.date === "All") {
-        return true;
-      }
-
-      const createdDate = new Date(orderDate);
-      if (Number.isNaN(createdDate.getTime())) {
-        return false;
-      }
-
-      if (filters.date === "Today") {
-        return createdDate.toDateString() === now.toDateString();
-      }
-
-      const diffMs = now.getTime() - createdDate.getTime();
-      const diffDays = diffMs / (1000 * 60 * 60 * 24);
-
-      if (filters.date === "Last 7 days") {
-        return diffDays <= 7;
-      }
-
-      if (filters.date === "Last 30 days") {
-        return diffDays <= 30;
-      }
-
-      return true;
-    };
-
     const rows = orders.filter((order) => {
       const orderId = String(order?._id || order?.id || order?.orderNumber || "").toLowerCase();
       const customer = getOrderCustomerName(order).toLowerCase();
-      const statusLabel = getOrderStatusLabel(order);
-      const paymentLabel = getPaymentStatusLabel(order);
-      const createdAt = order?.createdAt || order?.created || order?.updatedAt;
-
       const matchesSearch = !debouncedSearch || orderId.includes(debouncedSearch) || customer.includes(debouncedSearch);
-      const matchesStatus = filters.status === "All" || statusLabel === filters.status;
-      const matchesPayment = filters.payment === "All" || paymentLabel === filters.payment;
 
-      return matchesSearch && matchesStatus && matchesPayment && matchesDate(createdAt);
+      return matchesSearch;
     });
 
     rows.sort((a, b) => {
@@ -561,7 +592,12 @@ export default function AdminPage() {
     });
 
     return rows;
-  }, [orders, filters.status, filters.payment, filters.date, filters.sort, debouncedSearch]);
+  }, [orders, filters.sort, debouncedSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / ORDERS_PAGE_SIZE));
+  const safePage = Math.min(ordersPage, totalPages);
+  const paginatedOrders = filteredOrders.slice((safePage - 1) * ORDERS_PAGE_SIZE, safePage * ORDERS_PAGE_SIZE);
+  const currentOrdersLabel = ORDER_VIEW_OPTIONS.find((option) => option.key === ordersView)?.label || "Orders";
 
   const totalOrders = analyticsData.totalOrders || orders.length;
   const totalRevenue = analyticsData.totalRevenue || revenueStats.completedRevenue || 0;
@@ -866,8 +902,7 @@ export default function AdminPage() {
       // Refresh orders from backend after a short delay
       setTimeout(async () => {
         try {
-          const data = await fetchAdminOrders();
-          setOrders(data);
+          await loadOrders(ordersView);
           console.log("Orders refreshed from backend");
         } catch (refreshError) {
           console.error("Failed to refresh orders:", refreshError);
@@ -993,7 +1028,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="flex h-screen flex-col overflow-hidden">
       <header className="mx-auto w-[min(1200px,94vw)] pt-4">
         <div className="glass-card flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/70 px-4 py-3 shadow-soft">
           <Link
@@ -1023,8 +1058,8 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <div className="grid min-h-screen lg:grid-cols-[280px_1fr]">
-        <aside className="relative border-b border-sage-200 bg-gradient-to-b from-[#fcfaf5] to-[#ede5d8] p-4 lg:border-b-0 lg:border-r">
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[280px_1fr]">
+        <aside className="relative border-b border-sage-200 bg-gradient-to-b from-[#fcfaf5] to-[#ede5d8] p-4 lg:sticky lg:top-0 lg:h-[calc(100vh-88px)] lg:self-start lg:overflow-y-auto lg:border-b-0 lg:border-r">
           <div className="mb-3 pl-2">
             <h1 className="font-display text-4xl font-bold text-sage-800">Vrinda</h1>
             <p className="text-xs font-semibold text-sage-600">Admin control panel</p>
@@ -1050,7 +1085,7 @@ export default function AdminPage() {
           </nav>
         </aside>
 
-        <main className="space-y-3 p-4 md:p-6">
+        <main className={`flex min-h-0 flex-col gap-3 p-4 md:p-6 ${activeSection === "orders" ? "overflow-hidden" : "overflow-y-auto"}`}>
           <section className="glass-card p-6">
             <h2 className="font-display text-5xl font-bold leading-none text-sage-800">Admin Dashboard</h2>
             <p className="mt-2 text-sm text-sage-600">
@@ -1405,140 +1440,137 @@ export default function AdminPage() {
           {activeSection === "coupons" && <AdminCouponsPage />}
 
           {activeSection === "orders" && (
-            <section className="glass-card p-5">
-              <h3 className="font-display text-4xl font-semibold text-sage-800">Pending Orders</h3>
-              <div className="mt-3 grid gap-3 rounded-xl border border-sage-200/80 bg-white/70 p-3 md:grid-cols-2 lg:grid-cols-5">
-                <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
-                  Search
-                  <input
-                    type="text"
-                    value={filters.search}
-                    onChange={(event) => setFilters((old) => ({ ...old, search: event.target.value }))}
-                    placeholder="Order ID / Customer"
-                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
-                  />
-                </label>
+            <section className="glass-card flex min-h-0 flex-1 flex-col overflow-hidden p-5">
+              <div className="flex flex-col gap-3 border-b border-sage-200/80 pb-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-sage-600">Orders dashboard</p>
+                  <h3 className="mt-1 font-display text-4xl font-semibold text-sage-800">Smart order management</h3>
+                  <p className="mt-2 max-w-2xl text-sm text-sage-600">
+                    {ordersLoading ? "Loading filtered orders..." : `${currentOrdersLabel} · ${filteredOrders.length} result${filteredOrders.length === 1 ? "" : "s"}`}
+                  </p>
+                </div>
 
-                <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
-                  Status
-                  <select
-                    value={filters.status}
-                    onChange={(event) => setFilters((old) => ({ ...old, status: event.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
-                  >
-                    <option>All</option>
-                    <option>Pending</option>
-                    <option>Packed</option>
-                    <option>Out for Delivery</option>
-                    <option>Delivered</option>
-                  </select>
-                </label>
-
-                <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
-                  Payment
-                  <select
-                    value={filters.payment}
-                    onChange={(event) => setFilters((old) => ({ ...old, payment: event.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
-                  >
-                    <option>All</option>
-                    <option>Paid</option>
-                    <option>Pending</option>
-                    <option>Failed</option>
-                  </select>
-                </label>
-
-                <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
-                  Date
-                  <select
-                    value={filters.date}
-                    onChange={(event) => setFilters((old) => ({ ...old, date: event.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
-                  >
-                    <option>All</option>
-                    <option>Today</option>
-                    <option>Last 7 days</option>
-                    <option>Last 30 days</option>
-                  </select>
-                </label>
-
-                <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
-                  Sort
-                  <select
-                    value={filters.sort}
-                    onChange={(event) => setFilters((old) => ({ ...old, sort: event.target.value }))}
-                    className="mt-1 w-full rounded-xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
-                  >
-                    <option>Newest</option>
-                    <option>Oldest</option>
-                  </select>
-                </label>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-extrabold uppercase tracking-[0.14em] text-sage-700">
+                  <span className="rounded-full bg-sage-100 px-3 py-1 text-sage-700">Visible {paginatedOrders.length}</span>
+                  <span className="rounded-full bg-white px-3 py-1 text-sage-700">Page {safePage} / {totalPages}</span>
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700">Pending carry-over {orders.filter((order) => isPendingOrder(order)).length}</span>
+                </div>
               </div>
 
-              <div className="orders-container mt-3 rounded-xl border border-sage-200 bg-white/80">
-                <table className="min-w-[680px] w-full text-left text-sm">
-                  <thead className="orders-table-head text-xs uppercase tracking-wider text-sage-600">
+              <div className="mt-4 flex flex-col gap-3 rounded-3xl border border-sage-200/80 bg-white/80 p-3 shadow-sm">
+                <div className="grid gap-3 lg:grid-cols-[1.4fr_0.7fr]">
+                  <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
+                    Search
+                    <input
+                      type="text"
+                      value={filters.search}
+                      onChange={(event) => setFilters((old) => ({ ...old, search: event.target.value }))}
+                      placeholder="Order ID or customer name"
+                      className="mt-1 w-full rounded-2xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
+                    />
+                  </label>
+
+                  <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
+                    Sort
+                    <select
+                      value={filters.sort}
+                      onChange={(event) => setFilters((old) => ({ ...old, sort: event.target.value }))}
+                      className="mt-1 w-full rounded-2xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
+                    >
+                      <option>Newest</option>
+                      <option>Oldest</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {ORDER_VIEW_OPTIONS.map((option) => {
+                    const active = ordersView === option.key;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() => setOrdersView(option.key)}
+                        className={`rounded-full border px-4 py-2 text-xs font-extrabold uppercase tracking-[0.14em] transition ${
+                          active
+                            ? "border-sage-700 bg-sage-700 text-white shadow"
+                            : "border-sage-200 bg-white text-sage-700 hover:-translate-y-0.5 hover:border-sage-300 hover:shadow-sm"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="orders-container mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-sage-200 bg-white/90">
+                <div className="min-h-0 flex-1 overflow-auto">
+                  <table className="min-w-[980px] w-full text-left text-sm">
+                    <thead className="orders-table-head text-[11px] uppercase tracking-[0.2em] text-sage-600">
                     <tr>
-                      <th className="p-3">Order ID</th>
-                      <th className="p-3">Customer</th>
-                      <th className="p-3">Product</th>
-                      <th className="p-3">Qty</th>
-                      <th className="p-3">Amount (INR)</th>
-                      <th className="p-3">Status</th>
-                      <th className="p-3">Payment</th>
-                      <th className="p-3">Actions</th>
+                      <th className="w-[15%] px-3 py-3">Order ID</th>
+                      <th className="w-[18%] px-3 py-3">Customer</th>
+                      <th className="w-[19%] px-3 py-3">Date & Time</th>
+                      <th className="w-[11%] px-3 py-3">Amount</th>
+                      <th className="w-[12%] px-3 py-3">Payment</th>
+                      <th className="w-[14%] px-3 py-3">Status</th>
+                      <th className="w-[11%] px-3 py-3">Actions</th>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {!filteredOrders.length ? (
-                      <tr>
-                        <td className="p-3 text-sage-600" colSpan={8}>
-                          No orders match the selected filters.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredOrders.map((order) => {
+                    </thead>
+                    <tbody>
+                      {!paginatedOrders.length ? (
+                        <tr>
+                          <td className="px-3 py-6 text-sm text-sage-600" colSpan={7}>
+                            No orders match the selected filters.
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedOrders.map((order) => {
                         const orderId = String(order?._id || order?.id || order?.orderNumber || "-");
-                        const items = getOrderItems(order);
-                        const quantity = getOrderQuantity(order);
                         const amount = getOrderAmount(order);
                         const statusValue = getOrderStatusValue(order);
                         const statusLabel = getOrderStatusLabel(order);
                         const paymentLabel = getPaymentStatusLabel(order);
                         const paymentBadgeClass = getPaymentBadgeClass(order);
+                        const orderBadgeClass = getOrderBadgeClass(order);
                         const isPaymentFailed = getPaymentStatusValue(order) === "failed";
                         const isRazorpayUnpaid = String(order?.paymentMethod || "").toUpperCase() === "RAZORPAY" && getPaymentStatusValue(order) !== "paid";
                         const isPending = statusValue === "pending";
                         const isPacked = statusValue === "packed";
                         const isOutForDelivery = statusValue === "out for delivery";
                         const isDelivered = statusValue === "delivered";
-                        const badgeClass = `status-${statusValue.replace(/\s+/g, "-")}`;
+                        const createdAt = order?.createdAt || order?.created || order?.updatedAt;
+                        const { dateLabel, timeLabel } = formatOrderDateTime(createdAt);
                         return (
-                          <tr key={orderId} className="border-t border-sage-100 align-top">
-                            <td className="p-3 text-xs font-bold text-sage-700">{orderId}</td>
-                            <td className="p-3">{getOrderCustomerName(order)}</td>
-                            <td className="p-3">
-                              {items.length ? <div className="space-y-1">{formatOrderItems(order)}</div> : "-"}
+                          <tr key={orderId} className="border-b border-sage-100/80 align-top transition hover:bg-sage-50/70">
+                            <td className="px-3 py-2 text-xs font-bold text-sage-700">{orderId}</td>
+                            <td className="px-3 py-2">
+                              <div className="font-semibold text-sage-800">{getOrderCustomerName(order)}</div>
+                              <div className="mt-0.5 text-[11px] text-sage-500">{String(order?.user?.email || order?.shippingAddress?.phone || "")}</div>
                             </td>
-                            <td className="p-3">{quantity}</td>
-                            <td className="p-3">{formatInr(amount)}</td>
-                            <td className="p-3">
-                              <span className={`rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider ${badgeClass}`}>
-                                {statusLabel}
-                              </span>
+                            <td className="px-3 py-2">
+                              <div className="font-semibold text-sage-800">{dateLabel}</div>
+                              <div className="mt-0.5 text-[11px] text-sage-500">{timeLabel}</div>
                             </td>
-                            <td className="p-3">
-                              <span className={`rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider ${paymentBadgeClass}`}>
+                            <td className="px-3 py-2 font-semibold text-sage-800">{formatInr(amount)}</td>
+                            <td className="px-3 py-2">
+                              <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider ${paymentBadgeClass}`}>
                                 {paymentLabel}
                               </span>
                             </td>
-                            <td className="p-3">
-                              <div className="flex flex-wrap gap-2">
+                            <td className="px-3 py-2">
+                              <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider ${orderBadgeClass}`}>
+                                {statusLabel}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex flex-col gap-2">
                                 <button
                                   type="button"
                                   onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Packed")}
                                   disabled={!isPending || isPaymentFailed || isRazorpayUnpaid || updatingOrderId === (order._id || order.id || order.orderNumber)}
-                                  className={`rounded-full px-3 py-2 text-xs font-extrabold text-white transition ${
+                                  className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold text-white transition ${
                                     isPending && !isPaymentFailed && !isRazorpayUnpaid && updatingOrderId !== (order._id || order.id || order.orderNumber)
                                       ? "bg-blue-600 hover:bg-blue-700 cursor-pointer"
                                       : "cursor-not-allowed bg-gray-300 text-gray-600"
@@ -1550,7 +1582,7 @@ export default function AdminPage() {
                                   type="button"
                                   onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Out for Delivery")}
                                   disabled={!isPacked || isPaymentFailed || isRazorpayUnpaid || updatingOrderId === (order._id || order.id || order.orderNumber)}
-                                  className={`rounded-full px-3 py-2 text-xs font-extrabold text-white transition ${
+                                  className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold text-white transition ${
                                     isPacked && !isPaymentFailed && !isRazorpayUnpaid && updatingOrderId !== (order._id || order.id || order.orderNumber)
                                       ? "bg-orange-500 hover:bg-orange-600 cursor-pointer"
                                       : "cursor-not-allowed bg-gray-300 text-gray-600"
@@ -1562,7 +1594,7 @@ export default function AdminPage() {
                                   type="button"
                                   onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Delivered")}
                                   disabled={!isOutForDelivery || isPaymentFailed || isRazorpayUnpaid || updatingOrderId === (order._id || order.id || order.orderNumber)}
-                                  className={`rounded-full px-3 py-2 text-xs font-extrabold text-white transition ${
+                                  className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold text-white transition ${
                                     isOutForDelivery && !isPaymentFailed && !isRazorpayUnpaid && updatingOrderId !== (order._id || order.id || order.orderNumber)
                                       ? "bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
                                       : "cursor-not-allowed bg-gray-300 text-gray-600"
@@ -1579,7 +1611,7 @@ export default function AdminPage() {
                                     Payment Failed
                                   </span>
                                 ) : isRazorpayUnpaid ? (
-                                  <span className="rounded-full bg-amber-100 px-3 py-2 text-xs font-extrabold text-amber-700">
+                                    <span className="rounded-full bg-amber-100 px-3 py-1.5 text-[11px] font-extrabold text-amber-700">
                                     Awaiting Payment
                                   </span>
                                 ) : null}
@@ -1587,10 +1619,35 @@ export default function AdminPage() {
                             </td>
                           </tr>
                         );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex flex-col gap-3 border-t border-sage-200/80 bg-white/95 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs font-semibold text-sage-600">
+                    Showing {paginatedOrders.length} of {filteredOrders.length} orders
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={safePage <= 1}
+                      onClick={() => setOrdersPage((page) => Math.max(1, page - 1))}
+                      className="rounded-full border border-sage-200 bg-white px-4 py-2 text-xs font-extrabold text-sage-700 transition disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={safePage >= totalPages}
+                      onClick={() => setOrdersPage((page) => Math.min(totalPages, page + 1))}
+                      className="rounded-full border border-sage-200 bg-white px-4 py-2 text-xs font-extrabold text-sage-700 transition disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
               </div>
             </section>
           )}
