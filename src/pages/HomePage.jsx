@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import SiteNav from "../components/SiteNav";
 
 const highlights = [
@@ -99,10 +100,9 @@ export default function HomePage() {
                 Vrinda creates premium herbal essentials and artisan candles designed for serene mornings, grounded evenings, and homes that feel intentionally calm.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <button className="premium-btn">Explore Collection</button>
-                <button className="rounded-full border border-white/55 bg-white/20 px-6 py-3 text-sm font-extrabold text-white transition duration-300 ease-in-out hover:-translate-y-0.5 hover:shadow-lg">
-                  Watch Ritual Film
-                </button>
+                <Link to="/shop" className="premium-btn">
+                  Explore Collection
+                </Link>
               </div>
               <div className="mt-7 flex flex-wrap gap-4 text-sm font-semibold text-earth-100">
                 {highlights.map((item) => (
