@@ -1085,37 +1085,41 @@ export default function AdminPage() {
           </nav>
         </aside>
 
-        <main className={`flex min-h-0 flex-col gap-3 p-4 md:p-6 ${activeSection === "orders" ? "overflow-hidden" : "overflow-y-auto"}`}>
-          <section className="glass-card p-6">
-            <h2 className="font-display text-5xl font-bold leading-none text-sage-800">Admin Dashboard</h2>
-            <p className="mt-2 text-sm text-sage-600">
-              Manage products, pending orders, demand analytics, and revenue in INR. Logic stays client-side with localStorage.
-            </p>
-          </section>
-
+        <main className={`flex min-h-0 flex-col gap-2 p-3 md:p-4 ${activeSection === "orders" ? "overflow-hidden" : "overflow-y-auto"}`}>
           {activeSection === "overview" && (
-            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <article className="glass-card p-4">
-                <p className="text-xs font-extrabold uppercase tracking-widest text-sage-600">Current Orders Left</p>
-                <strong className="mt-2 block font-display text-4xl text-sage-700">{pendingOrders}</strong>
-              </article>
-              <article className="glass-card p-4">
-                <p className="text-xs font-extrabold uppercase tracking-widest text-sage-600">Total Orders</p>
-                <strong className="mt-2 block font-display text-4xl text-sage-700">{orders.length}</strong>
-              </article>
-              <article className="glass-card p-4">
-                <p className="text-xs font-extrabold uppercase tracking-widest text-sage-600">Top Demand Product</p>
-                <strong className="mt-2 block font-display text-3xl text-sage-700">{topProduct.name}</strong>
-              </article>
-              <article className="glass-card p-4">
-                <p className="text-xs font-extrabold uppercase tracking-widest text-sage-600">Revenue Tracker (INR)</p>
-                <strong className="mt-2 block font-display text-3xl text-sage-700">{formatInr(revenueStats.completedRevenue)}</strong>
-              </article>
+            <section className="space-y-2">
+              <div className="glass-card p-3">
+                <h2 className="font-display text-2xl font-bold text-sage-800">Dashboard Overview</h2>
+                <p className="mt-0.5 text-[11px] text-sage-600">Pending orders, revenue, and product performance at a glance.</p>
+              </div>
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                <article className="glass-card p-3">
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-sage-600">Current Orders Left</p>
+                  <strong className="mt-1.5 block font-display text-3xl text-sage-700">{pendingOrders}</strong>
+                </article>
+                <article className="glass-card p-3">
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-sage-600">Total Orders</p>
+                  <strong className="mt-1.5 block font-display text-3xl text-sage-700">{orders.length}</strong>
+                </article>
+                <article className="glass-card p-3">
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-sage-600">Top Demand Product</p>
+                  <strong className="mt-1.5 block font-display text-2xl text-sage-700">{topProduct.name}</strong>
+                </article>
+                <article className="glass-card p-3">
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-sage-600">Revenue Tracker (INR)</p>
+                  <strong className="mt-1.5 block font-display text-2xl text-sage-700">{formatInr(revenueStats.completedRevenue)}</strong>
+                </article>
+              </div>
             </section>
           )}
 
           {activeSection === "products" && (
-            <section className="grid gap-3 xl:grid-cols-[1.08fr_0.92fr]">
+            <section className="space-y-2">
+              <div className="glass-card p-3">
+                <h2 className="font-display text-2xl font-bold text-sage-800">Product Management</h2>
+                <p className="mt-0.5 text-[11px] text-sage-600">Add, edit, and manage your product catalog.</p>
+              </div>
+              <div className="grid gap-3 xl:grid-cols-[1.08fr_0.92fr]">
               <article className="glass-card p-5">
                 <h3 className="font-display text-4xl font-semibold text-sage-800">Add Product</h3>
                 <form onSubmit={addProduct} className="mt-4 space-y-3">
@@ -1432,219 +1436,228 @@ export default function AdminPage() {
                   )}
                 </div>
               </article>
+              </div>
             </section>
           )}
 
-          {activeSection === "inventory" && <AdminInventory products={products} />}
+          {activeSection === "inventory" && (
+            <section className="space-y-2">
+              <div className="glass-card p-3">
+                <h2 className="font-display text-2xl font-bold text-sage-800">Inventory Management</h2>
+                <p className="mt-0.5 text-[11px] text-sage-600">Monitor stock levels and product availability.</p>
+              </div>
+              <AdminInventory products={products} />
+            </section>
+          )}
 
-          {activeSection === "coupons" && <AdminCouponsPage />}
+          {activeSection === "coupons" && (
+            <section className="space-y-2">
+              <div className="glass-card p-3">
+                <h2 className="font-display text-2xl font-bold text-sage-800">Coupon Management</h2>
+                <p className="mt-0.5 text-[11px] text-sage-600">Create and manage promotional coupons.</p>
+              </div>
+              <AdminCouponsPage />
+            </section>
+          )}
 
           {activeSection === "orders" && (
-            <section className="glass-card flex min-h-0 flex-1 flex-col overflow-hidden p-5">
-              <div className="flex flex-col gap-3 border-b border-sage-200/80 pb-4 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-sage-600">Orders dashboard</p>
-                  <h3 className="mt-1 font-display text-4xl font-semibold text-sage-800">Smart order management</h3>
-                  <p className="mt-2 max-w-2xl text-sm text-sage-600">
-                    {ordersLoading ? "Loading filtered orders..." : `${currentOrdersLabel} · ${filteredOrders.length} result${filteredOrders.length === 1 ? "" : "s"}`}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-xs font-extrabold uppercase tracking-[0.14em] text-sage-700">
-                  <span className="rounded-full bg-sage-100 px-3 py-1 text-sage-700">Visible {paginatedOrders.length}</span>
-                  <span className="rounded-full bg-white px-3 py-1 text-sage-700">Page {safePage} / {totalPages}</span>
-                  <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700">Pending carry-over {orders.filter((order) => isPendingOrder(order)).length}</span>
-                </div>
+            <section className="glass-card flex min-h-0 flex-1 flex-col overflow-hidden p-3 md:p-4">
+              <div className="flex flex-col gap-2 border-b border-sage-200 pb-2">
+                <h3 className="font-display text-2xl font-bold text-sage-800">Pending Orders</h3>
+                <p className="text-[11px] text-sage-600">
+                  {ordersLoading ? "Loading..." : `${currentOrdersLabel} · ${filteredOrders.length} result${filteredOrders.length === 1 ? "" : "s"}`}
+                </p>
               </div>
 
-              <div className="mt-4 flex flex-col gap-3 rounded-3xl border border-sage-200/80 bg-white/80 p-3 shadow-sm">
-                <div className="grid gap-3 lg:grid-cols-[1.4fr_0.7fr]">
-                  <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
-                    Search
-                    <input
-                      type="text"
-                      value={filters.search}
-                      onChange={(event) => setFilters((old) => ({ ...old, search: event.target.value }))}
-                      placeholder="Order ID or customer name"
-                      className="mt-1 w-full rounded-2xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
-                    />
-                  </label>
+              <div className="orders-container mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-sage-200 bg-white/95">
+                <div className="orders-filter-bar flex flex-col gap-2 border-b border-sage-200/80 bg-white/90 p-2 px-3 py-2.5">
+                  <div className="grid gap-2 lg:grid-cols-[1.5fr_0.6fr]">
+                    <label className="text-[10px] font-extrabold uppercase tracking-widest text-sage-600">
+                      Search
+                      <input
+                        type="text"
+                        value={filters.search}
+                        onChange={(event) => setFilters((old) => ({ ...old, search: event.target.value }))}
+                        placeholder="Order ID / Customer"
+                        className="mt-0.5 w-full rounded-lg border border-sage-200 bg-white px-2 py-1 text-xs font-medium text-sage-800 outline-none focus:border-sage-400"
+                      />
+                    </label>
 
-                  <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-sage-700">
-                    Sort
-                    <select
-                      value={filters.sort}
-                      onChange={(event) => setFilters((old) => ({ ...old, sort: event.target.value }))}
-                      className="mt-1 w-full rounded-2xl border border-sage-200 bg-white px-3 py-2 text-sm font-semibold text-sage-800 outline-none focus:border-sage-400"
-                    >
-                      <option>Newest</option>
-                      <option>Oldest</option>
-                    </select>
-                  </label>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {ORDER_VIEW_OPTIONS.map((option) => {
-                    const active = ordersView === option.key;
-                    return (
-                      <button
-                        key={option.key}
-                        type="button"
-                        onClick={() => setOrdersView(option.key)}
-                        className={`rounded-full border px-4 py-2 text-xs font-extrabold uppercase tracking-[0.14em] transition ${
-                          active
-                            ? "border-sage-700 bg-sage-700 text-white shadow"
-                            : "border-sage-200 bg-white text-sage-700 hover:-translate-y-0.5 hover:border-sage-300 hover:shadow-sm"
-                        }`}
+                    <label className="text-[10px] font-extrabold uppercase tracking-widest text-sage-600">
+                      Sort
+                      <select
+                        value={filters.sort}
+                        onChange={(event) => setFilters((old) => ({ ...old, sort: event.target.value }))}
+                        className="mt-0.5 w-full rounded-lg border border-sage-200 bg-white px-2 py-1 text-xs font-medium text-sage-800 outline-none focus:border-sage-400"
                       >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                        <option>Newest</option>
+                        <option>Oldest</option>
+                      </select>
+                    </label>
+                  </div>
 
-              <div className="orders-container mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-sage-200 bg-white/90">
+                  <div className="flex flex-wrap gap-1">
+                    {ORDER_VIEW_OPTIONS.map((option) => {
+                      const active = ordersView === option.key;
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          onClick={() => setOrdersView(option.key)}
+                          disabled={ordersLoading}
+                          className={`rounded-full border px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-widest transition disabled:opacity-50 ${
+                            active
+                              ? "border-sage-700 bg-sage-700 text-white shadow-xs"
+                              : "border-sage-200 bg-white text-sage-700 hover:border-sage-300 hover:shadow-xs"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-sage-100 text-[9px] font-extrabold uppercase tracking-widest text-sage-600">
+                    <span className="rounded-full bg-sage-100 px-2 py-0.5">Visible: {paginatedOrders.length}</span>
+                    <span className="rounded-full bg-white border border-sage-200 px-2 py-0.5">{safePage}/{totalPages}</span>
+                    <span className="rounded-full bg-amber-100 text-amber-700 px-2 py-0.5">Pending: {orders.filter((order) => isPendingOrder(order)).length}</span>
+                  </div>
+                </div>
+
                 <div className="min-h-0 flex-1 overflow-auto">
-                  <table className="min-w-[980px] w-full text-left text-sm">
-                    <thead className="orders-table-head text-[11px] uppercase tracking-[0.2em] text-sage-600">
-                    <tr>
-                      <th className="w-[15%] px-3 py-3">Order ID</th>
-                      <th className="w-[18%] px-3 py-3">Customer</th>
-                      <th className="w-[19%] px-3 py-3">Date & Time</th>
-                      <th className="w-[11%] px-3 py-3">Amount</th>
-                      <th className="w-[12%] px-3 py-3">Payment</th>
-                      <th className="w-[14%] px-3 py-3">Status</th>
-                      <th className="w-[11%] px-3 py-3">Actions</th>
-                    </tr>
+                  <table className="w-full text-left text-xs">
+                    <thead className="orders-table-head text-[10px] font-extrabold uppercase tracking-wider text-sage-600">
+                      <tr className="bg-white">
+                        <th className="w-[14%] px-2.5 py-2">Order ID</th>
+                        <th className="w-[16%] px-2.5 py-2">Customer</th>
+                        <th className="w-[17%] px-2.5 py-2">Date & Time</th>
+                        <th className="w-[10%] px-2.5 py-2">Amount</th>
+                        <th className="w-[11%] px-2.5 py-2">Payment</th>
+                        <th className="w-[13%] px-2.5 py-2">Status</th>
+                        <th className="w-[19%] px-2.5 py-2">Actions</th>
+                      </tr>
                     </thead>
                     <tbody>
                       {!paginatedOrders.length ? (
                         <tr>
-                          <td className="px-3 py-6 text-sm text-sage-600" colSpan={7}>
-                            No orders match the selected filters.
+                          <td className="px-3 py-10 text-center text-xs text-sage-600" colSpan={7}>
+                            <div className="inline-flex flex-col items-center gap-1.5">
+                              <div className="text-2xl">🔍</div>
+                              <div className="font-semibold">No orders found</div>
+                              {filteredOrders.length === 0 && debouncedSearch && (
+                                <div className="text-[10px] text-sage-500">Try adjusting your search or filters</div>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ) : (
                         paginatedOrders.map((order) => {
-                        const orderId = String(order?._id || order?.id || order?.orderNumber || "-");
-                        const amount = getOrderAmount(order);
-                        const statusValue = getOrderStatusValue(order);
-                        const statusLabel = getOrderStatusLabel(order);
-                        const paymentLabel = getPaymentStatusLabel(order);
-                        const paymentBadgeClass = getPaymentBadgeClass(order);
-                        const orderBadgeClass = getOrderBadgeClass(order);
-                        const isPaymentFailed = getPaymentStatusValue(order) === "failed";
-                        const isRazorpayUnpaid = String(order?.paymentMethod || "").toUpperCase() === "RAZORPAY" && getPaymentStatusValue(order) !== "paid";
-                        const isPending = statusValue === "pending";
-                        const isPacked = statusValue === "packed";
-                        const isOutForDelivery = statusValue === "out for delivery";
-                        const isDelivered = statusValue === "delivered";
-                        const createdAt = order?.createdAt || order?.created || order?.updatedAt;
-                        const { dateLabel, timeLabel } = formatOrderDateTime(createdAt);
-                        return (
-                          <tr key={orderId} className="border-b border-sage-100/80 align-top transition hover:bg-sage-50/70">
-                            <td className="px-3 py-2 text-xs font-bold text-sage-700">{orderId}</td>
-                            <td className="px-3 py-2">
-                              <div className="font-semibold text-sage-800">{getOrderCustomerName(order)}</div>
-                              <div className="mt-0.5 text-[11px] text-sage-500">{String(order?.user?.email || order?.shippingAddress?.phone || "")}</div>
-                            </td>
-                            <td className="px-3 py-2">
-                              <div className="font-semibold text-sage-800">{dateLabel}</div>
-                              <div className="mt-0.5 text-[11px] text-sage-500">{timeLabel}</div>
-                            </td>
-                            <td className="px-3 py-2 font-semibold text-sage-800">{formatInr(amount)}</td>
-                            <td className="px-3 py-2">
-                              <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider ${paymentBadgeClass}`}>
-                                {paymentLabel}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2">
-                              <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider ${orderBadgeClass}`}>
-                                {statusLabel}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2">
-                              <div className="flex flex-col gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Packed")}
-                                  disabled={!isPending || isPaymentFailed || isRazorpayUnpaid || updatingOrderId === (order._id || order.id || order.orderNumber)}
-                                  className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold text-white transition ${
-                                    isPending && !isPaymentFailed && !isRazorpayUnpaid && updatingOrderId !== (order._id || order.id || order.orderNumber)
-                                      ? "bg-blue-600 hover:bg-blue-700 cursor-pointer"
-                                      : "cursor-not-allowed bg-gray-300 text-gray-600"
-                                  }`}
-                                >
-                                  {updatingOrderId === (order._id || order.id || order.orderNumber) ? "Updating..." : "Mark Packed"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Out for Delivery")}
-                                  disabled={!isPacked || isPaymentFailed || isRazorpayUnpaid || updatingOrderId === (order._id || order.id || order.orderNumber)}
-                                  className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold text-white transition ${
-                                    isPacked && !isPaymentFailed && !isRazorpayUnpaid && updatingOrderId !== (order._id || order.id || order.orderNumber)
-                                      ? "bg-orange-500 hover:bg-orange-600 cursor-pointer"
-                                      : "cursor-not-allowed bg-gray-300 text-gray-600"
-                                  }`}
-                                >
-                                  {updatingOrderId === (order._id || order.id || order.orderNumber) ? "Updating..." : "Out for Delivery"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Delivered")}
-                                  disabled={!isOutForDelivery || isPaymentFailed || isRazorpayUnpaid || updatingOrderId === (order._id || order.id || order.orderNumber)}
-                                  className={`rounded-full px-3 py-1.5 text-[11px] font-extrabold text-white transition ${
-                                    isOutForDelivery && !isPaymentFailed && !isRazorpayUnpaid && updatingOrderId !== (order._id || order.id || order.orderNumber)
-                                      ? "bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
-                                      : "cursor-not-allowed bg-gray-300 text-gray-600"
-                                  }`}
-                                >
-                                  {updatingOrderId === (order._id || order.id || order.orderNumber) ? "Updating..." : "Delivered"}
-                                </button>
-                                {isDelivered ? (
-                                  <span className="rounded-full bg-gray-200 px-3 py-2 text-xs font-extrabold text-gray-600">
-                                    All actions disabled
-                                  </span>
-                                ) : isPaymentFailed ? (
-                                  <span className="rounded-full bg-rose-100 px-3 py-2 text-xs font-extrabold text-rose-700">
-                                    Payment Failed
-                                  </span>
-                                ) : isRazorpayUnpaid ? (
-                                    <span className="rounded-full bg-amber-100 px-3 py-1.5 text-[11px] font-extrabold text-amber-700">
-                                    Awaiting Payment
-                                  </span>
-                                ) : null}
-                              </div>
-                            </td>
-                          </tr>
-                        );
+                          const orderId = String(order?._id || order?.id || order?.orderNumber || "-");
+                          const amount = getOrderAmount(order);
+                          const statusValue = getOrderStatusValue(order);
+                          const statusLabel = getOrderStatusLabel(order);
+                          const paymentLabel = getPaymentStatusLabel(order);
+                          const paymentBadgeClass = getPaymentBadgeClass(order);
+                          const orderBadgeClass = getOrderBadgeClass(order);
+                          const isPaymentFailed = getPaymentStatusValue(order) === "failed";
+                          const isRazorpayUnpaid = String(order?.paymentMethod || "").toUpperCase() === "RAZORPAY" && getPaymentStatusValue(order) !== "paid";
+                          const isPending = statusValue === "pending";
+                          const isPacked = statusValue === "packed";
+                          const isOutForDelivery = statusValue === "out for delivery";
+                          const isDelivered = statusValue === "delivered";
+                          const createdAt = order?.createdAt || order?.created || order?.updatedAt;
+                          const { dateLabel, timeLabel } = formatOrderDateTime(createdAt);
+                          return (
+                            <tr key={orderId} className="border-b border-sage-100/60 align-top transition hover:bg-sage-50/40">
+                              <td className="px-2.5 py-1.5 font-bold text-sage-700 text-[10px]">{orderId.substring(0, 12)}</td>
+                              <td className="px-2.5 py-1.5">
+                                <div className="font-semibold text-sage-800 text-[10px]">{getOrderCustomerName(order).substring(0, 18)}</div>
+                                <div className="mt-0.5 text-[9px] text-sage-500">{String(order?.user?.email || order?.shippingAddress?.phone || "").substring(0, 18)}</div>
+                              </td>
+                              <td className="px-2.5 py-1.5">
+                                <div className="font-semibold text-sage-800 text-[10px]">{dateLabel}</div>
+                                <div className="mt-0.5 text-[9px] text-sage-500">{timeLabel}</div>
+                              </td>
+                              <td className="px-2.5 py-1.5 font-semibold text-sage-800 text-[10px]">{formatInr(amount)}</td>
+                              <td className="px-2.5 py-1.5">
+                                <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider ${paymentBadgeClass}`}>
+                                  {paymentLabel}
+                                </span>
+                              </td>
+                              <td className="px-2.5 py-1.5">
+                                <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider ${orderBadgeClass}`}>
+                                  {statusLabel}
+                                </span>
+                              </td>
+                              <td className="px-2.5 py-1.5">
+                                <div className="flex flex-col gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Packed")}
+                                    disabled={!isPending || isPaymentFailed || isRazorpayUnpaid || updatingOrderId === (order._id || order.id || order.orderNumber)}
+                                    className={`rounded px-1.5 py-0.5 text-[8px] font-extrabold text-white transition whitespace-nowrap ${
+                                      isPending && !isPaymentFailed && !isRazorpayUnpaid && updatingOrderId !== (order._id || order.id || order.orderNumber)
+                                        ? "bg-blue-600 hover:bg-blue-700 cursor-pointer"
+                                        : "cursor-not-allowed bg-gray-300 text-gray-600"
+                                    }`}
+                                  >
+                                    {updatingOrderId === (order._id || order.id || order.orderNumber) ? "..." : "Pack"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Out for Delivery")}
+                                    disabled={!isPacked || isPaymentFailed || isRazorpayUnpaid || updatingOrderId === (order._id || order.id || order.orderNumber)}
+                                    className={`rounded px-1.5 py-0.5 text-[8px] font-extrabold text-white transition whitespace-nowrap ${
+                                      isPacked && !isPaymentFailed && !isRazorpayUnpaid && updatingOrderId !== (order._id || order.id || order.orderNumber)
+                                        ? "bg-orange-500 hover:bg-orange-600 cursor-pointer"
+                                        : "cursor-not-allowed bg-gray-300 text-gray-600"
+                                    }`}
+                                  >
+                                    {updatingOrderId === (order._id || order.id || order.orderNumber) ? "..." : "Ship"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateStatus(order._id || order.id || order.orderNumber, "Delivered")}
+                                    disabled={!isOutForDelivery || isPaymentFailed || isRazorpayUnpaid || updatingOrderId === (order._id || order.id || order.orderNumber)}
+                                    className={`rounded px-1.5 py-0.5 text-[8px] font-extrabold text-white transition whitespace-nowrap ${
+                                      isOutForDelivery && !isPaymentFailed && !isRazorpayUnpaid && updatingOrderId !== (order._id || order.id || order.orderNumber)
+                                        ? "bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
+                                        : "cursor-not-allowed bg-gray-300 text-gray-600"
+                                    }`}
+                                  >
+                                    {updatingOrderId === (order._id || order.id || order.orderNumber) ? "..." : "Done"}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
                         })
                       )}
                     </tbody>
                   </table>
                 </div>
 
-                <div className="flex flex-col gap-3 border-t border-sage-200/80 bg-white/95 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs font-semibold text-sage-600">
-                    Showing {paginatedOrders.length} of {filteredOrders.length} orders
+                <div className="flex flex-col gap-1.5 border-t border-sage-200/80 bg-white/95 px-3 py-2 sm:flex-row sm:items-center sm:justify-between text-[10px]">
+                  <p className="font-semibold text-sage-600">
+                    {paginatedOrders.length} of {filteredOrders.length} shown
                   </p>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      disabled={safePage <= 1}
+                      disabled={safePage <= 1 || ordersLoading}
                       onClick={() => setOrdersPage((page) => Math.max(1, page - 1))}
-                      className="rounded-full border border-sage-200 bg-white px-4 py-2 text-xs font-extrabold text-sage-700 transition disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded border border-sage-200 bg-white px-2 py-1 font-extrabold text-sage-700 transition hover:bg-sage-50 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      Previous
+                      ← Prev
                     </button>
+                    <span className="px-1.5 py-1 text-sage-600 font-semibold">{safePage}/{totalPages}</span>
                     <button
                       type="button"
-                      disabled={safePage >= totalPages}
+                      disabled={safePage >= totalPages || ordersLoading}
                       onClick={() => setOrdersPage((page) => Math.min(totalPages, page + 1))}
-                      className="rounded-full border border-sage-200 bg-white px-4 py-2 text-xs font-extrabold text-sage-700 transition disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded border border-sage-200 bg-white px-2 py-1 font-extrabold text-sage-700 transition hover:bg-sage-50 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      Next
+                      Next →
                     </button>
                   </div>
                 </div>
@@ -1652,29 +1665,76 @@ export default function AdminPage() {
             </section>
           )}
 
-          {activeSection === "analytics" && (
-            <section className="glass-card p-5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                <div>
-                  <h3 className="font-display text-4xl font-semibold text-sage-800">Analytics Dashboard</h3>
-                  <p className="mt-1 text-sm text-sage-600">Review performance over the selected time range.</p>
-                </div>
-                <label className="inline-flex flex-col gap-2 text-xs font-extrabold uppercase tracking-[0.14em] text-sage-600">
-                  Time Range
-                  <select
-                    value={analyticsRange}
-                    onChange={(event) => {
-                      setAnalyticsRange(event.target.value);
-                      console.log("Analytics range changed to:", event.target.value);
-                    }}
-                    className="min-w-44 rounded-2xl border border-sage-200 bg-white px-4 py-3 text-sm font-semibold text-sage-800 outline-none transition focus:border-sage-400"
-                  >
-                    <option value="7d">Last 7 days</option>
-                    <option value="30d">Last 30 days</option>
-                    <option value="all">All time</option>
-                  </select>
-                </label>
+          {activeSection === "contacts" && (
+            <section className="space-y-2">
+              <div className="glass-card p-3">
+                <h2 className="font-display text-2xl font-bold text-sage-800">Contact Messages</h2>
+                <p className="mt-0.5 text-[11px] text-sage-600">View and manage customer messages.</p>
               </div>
+              <AdminContactMessages />
+            </section>
+          )}
+
+          {activeSection === "revenue" && (
+            <section className="space-y-2">
+              <div className="glass-card p-3">
+                <h2 className="font-display text-2xl font-bold text-sage-800">Revenue Tracker</h2>
+                <p className="mt-0.5 text-[11px] text-sage-600">Monitor completed and pending revenue.</p>
+              </div>
+              <div className="grid gap-2 xl:grid-cols-2">
+                <article className="glass-card p-4">
+                  <h3 className="font-display text-2xl font-semibold text-sage-800">Revenue Metrics</h3>
+                  <div className="mt-3 grid gap-2">
+                    <Metric title="Total Revenue (Completed)" value={formatInr(revenueStats.completedRevenue)} />
+                    <Metric title="Pending Pipeline Value" value={formatInr(revenueStats.pendingPipeline)} />
+                    <Metric title="Avg Order Value" value={formatInr(revenueStats.averageCompletedOrderValue)} />
+                    <Metric title="Completed Orders" value={String(revenueStats.completedCount)} />
+                  </div>
+                </article>
+                <article className="glass-card p-4">
+                  <h3 className="font-display text-2xl font-semibold text-sage-800">Summary</h3>
+                  <div className="mt-3 grid gap-2">
+                    <Metric title="Total Orders" value={String(orders.length)} />
+                    <Metric title="Pending Orders" value={String(pendingOrders)} />
+                  </div>
+                  <p className="mt-3 rounded-lg border border-dashed border-sage-300 bg-sage-50/50 p-2 text-xs text-sage-600">
+                    {revenueStats.completedRevenue > 0
+                      ? `Completed: ${formatInr(revenueStats.completedRevenue)} | Pending: ${formatInr(revenueStats.pendingPipeline)}`
+                      : "No revenue trends yet."}
+                  </p>
+                </article>
+              </div>
+            </section>
+          )}
+
+          {activeSection === "analytics" && (
+            <section className="space-y-2">
+              <div className="glass-card p-3">
+                <h2 className="font-display text-2xl font-bold text-sage-800">Analytics</h2>
+                <p className="mt-0.5 text-[11px] text-sage-600">Performance metrics and trends over time.</p>
+              </div>
+              <div className="glass-card p-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <h3 className="font-display text-xl font-semibold text-sage-800">Analytics Dashboard</h3>
+                    <p className="mt-0.5 text-[11px] text-sage-600">Review performance over the selected time range.</p>
+                  </div>
+                  <label className="inline-flex flex-col gap-1 text-[10px] font-extrabold uppercase tracking-widest text-sage-600">
+                    Time Range
+                    <select
+                      value={analyticsRange}
+                      onChange={(event) => {
+                        setAnalyticsRange(event.target.value);
+                        console.log("Analytics range changed to:", event.target.value);
+                      }}
+                      className="mt-0.5 rounded-lg border border-sage-200 bg-white px-2 py-1 text-xs font-semibold text-sage-800 outline-none transition focus:border-sage-400"
+                    >
+                      <option value="7d">Last 7 days</option>
+                      <option value="30d">Last 30 days</option>
+                      <option value="all">All time</option>
+                    </select>
+                  </label>
+                </div>
               {!orders.length && !products.length ? (
                 <div className="mt-6 overflow-hidden rounded-3xl border border-sage-200 bg-gradient-to-br from-white via-[#f6fbf7] to-[#eaf6ee] p-8 text-sage-700 shadow-soft">
                   <div className="flex flex-col items-center gap-5 text-center md:flex-row md:text-left">
@@ -1890,37 +1950,7 @@ export default function AdminPage() {
                   </div>
                 </div>
               )}
-            </section>
-          )}
-
-          {activeSection === "contacts" && (
-            <AdminContactMessages />
-          )}
-
-          {activeSection === "revenue" && (
-            <section className="grid gap-3 xl:grid-cols-2">
-              <article className="glass-card p-5">
-                <h3 className="font-display text-4xl font-semibold text-sage-800">Revenue Tracker</h3>
-                <div className="mt-4 grid gap-2">
-                  <Metric title="Total Revenue (Completed)" value={formatInr(revenueStats.completedRevenue)} />
-                  <Metric title="Pending Pipeline Value" value={formatInr(revenueStats.pendingPipeline)} />
-                  <Metric title="Average Completed Order Value" value={formatInr(revenueStats.averageCompletedOrderValue)} />
-                  <Metric title="Completed Orders" value={String(revenueStats.completedCount)} />
-                </div>
-              </article>
-
-              <article className="glass-card p-5">
-                <h3 className="font-display text-4xl font-semibold text-sage-800">Revenue Notes</h3>
-                <div className="mt-4 grid gap-2">
-                  <Metric title="Total Orders" value={String(orders.length)} />
-                  <Metric title="Current Pending Orders" value={String(pendingOrders)} />
-                </div>
-                <p className="mt-3 rounded-xl border border-dashed border-sage-300 p-3 text-sm text-sage-600">
-                  {revenueStats.completedRevenue > 0
-                    ? `Completed revenue is ${formatInr(revenueStats.completedRevenue)}. Pending pipeline stands at ${formatInr(revenueStats.pendingPipeline)}.`
-                    : "No revenue trends yet. Add completed orders to start tracking."}
-                </p>
-              </article>
+              </div>
             </section>
           )}
         </main>
