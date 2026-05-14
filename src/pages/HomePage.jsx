@@ -228,31 +228,31 @@ export default function HomePage() {
         {/* ====== 2. INGREDIENT PHILOSOPHY SECTION ====== */}
         <section className="relative py-20 md:py-28 bg-gradient-to-b from-[#fbf9f3] to-[#f5f3ed]">
           <div className="mx-auto w-[min(1120px,94vw)]">
-            <div className="section-reveal text-center mb-14">
+            <div className="section-reveal text-center mb-16">
               <h2 className="font-display text-4xl md:text-5xl font-bold text-sage-900 mb-4">Rooted in Nature</h2>
               <p className="max-w-2xl mx-auto text-sage-700 leading-relaxed">
                 Each ingredient is selected for its botanical benefits and sustainability. We honor ancient wisdom combined with modern wellness science.
               </p>
             </div>
 
-            <div className="section-reveal overflow-x-auto pb-4 -mx-2 px-2">
-              <div className="flex gap-4 min-w-max">
+            {/* Responsive Grid - Mobile: 2 cols, Tablet: 3 cols, Desktop: 4-5 cols with scroll */}
+            <div className="section-reveal ingredients-container overflow-x-auto">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6 min-w-min">
                 {ingredients.map((ingredient, index) => (
                   <div
                     key={ingredient.name}
-                    className="group glass-card overflow-hidden rounded-[20px] border border-white/60 bg-gradient-to-br from-white/80 to-[#f9f5ed]/60 p-5 shadow-soft hover:shadow-md transition-all duration-300 cursor-pointer hover:-translate-y-1 flex-shrink-0 w-80"
+                    className="ingredient-card group glass-card overflow-hidden rounded-[20px] border border-white/60 bg-gradient-to-br from-white/80 to-[#f9f5ed]/60 p-4 shadow-soft hover:shadow-lg cursor-pointer"
                     style={{ transitionDelay: `${index * 50}ms` }}
                   >
-                    <div className="mb-3 h-32 overflow-hidden rounded-[16px] bg-gradient-to-br from-sage-100 to-emerald-50 flex items-center justify-center">
+                    <div className="ingredient-image-wrapper mb-4">
                       <img 
                         src={ingredient.image} 
                         alt={ingredient.name}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                       />
                     </div>
-                    <h3 className="font-display text-lg font-semibold text-sage-900">{ingredient.name}</h3>
-                    <p className="mt-2 text-sm text-sage-700 leading-relaxed">{ingredient.benefit}</p>
-                    <div className="mt-3 h-0.5 w-8 bg-gradient-to-r from-emerald-400 to-sage-400 group-hover:w-full transition-all duration-300" />
+                    <h3 className="font-display text-base md:text-lg font-semibold text-sage-900 line-clamp-1">{ingredient.name}</h3>
+                    <p className="mt-2 text-xs md:text-sm text-sage-700 leading-relaxed line-clamp-2">{ingredient.benefit}</p>
+                    <div className="ingredient-accent-line mt-3" />
                   </div>
                 ))}
               </div>

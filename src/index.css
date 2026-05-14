@@ -99,6 +99,58 @@
     box-shadow: 0 18px 34px rgba(31, 61, 43, 0.4);
   }
 
+  /* ===== INGREDIENT SECTION STYLING ===== */
+  .ingredients-container {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+
+  .ingredients-container::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+  }
+
+  /* Scroll snap for mobile premium feel */
+  @media (max-width: 768px) {
+    .ingredients-container {
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+    }
+
+    .ingredient-card {
+      scroll-snap-align: start;
+      scroll-snap-stop: always;
+    }
+  }
+
+  /* Card styling and animations */
+  .ingredient-card {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .ingredient-card:hover {
+    @apply -translate-y-2;
+  }
+
+  .ingredient-image-wrapper {
+    @apply relative overflow-hidden rounded-[16px] aspect-square;
+  }
+
+  .ingredient-image-wrapper img {
+    @apply w-full h-full object-cover transition-transform duration-500 ease-out;
+  }
+
+  .ingredient-card:hover .ingredient-image-wrapper img {
+    @apply scale-110;
+  }
+
+  .ingredient-accent-line {
+    @apply h-0.5 w-8 bg-gradient-to-r from-emerald-400 to-sage-400 transition-all duration-300;
+  }
+
+  .ingredient-card:hover .ingredient-accent-line {
+    @apply w-full;
+  }
+
   .cart-icon-pulse {
     animation: cartPulse 0.36s ease-out;
   }
