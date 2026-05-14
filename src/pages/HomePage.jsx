@@ -17,12 +17,11 @@ const taglines = [
 ];
 
 const ingredients = [
-  { name: "Saffron", benefit: "Brightens and revitalizes skin naturally", image: "/images/saffron.jpeg", icon: "✨" },
-  { name: "Neem", benefit: "Deep cleansing and healing properties", image: "/images/neem.jpeg", icon: "🌿" },
-  { name: "Rose", benefit: "Calms and balances sensitive skin", image: "/images/rose.jpeg", icon: "🌹" },
-  { name: "Lavender", benefit: "Soothes and promotes relaxation", image: "/images/lavender.jpeg", icon: "💜" },
-  { name: "Turmeric", benefit: "Anti-inflammatory and skin brightening", image: "/images/turmeric.jpeg", icon: "🟡" },
-  { name: "Aloe Vera", benefit: "Hydrates and cools irritated skin", image: "/images/aloe.jpeg", icon: "💚" }
+  { name: "Saffron", benefit: "Brightens and revitalizes skin naturally", image: "/images/saffron.webp", icon: "✨" },
+  { name: "Neem", benefit: "Deep cleansing and healing properties", image: "/images/neem.webp", icon: "🌿" },
+  { name: "Lavender", benefit: "Soothes and promotes relaxation", image: "/images/lavender.jpg", icon: "💜" },
+  { name: "Turmeric", benefit: "Anti-inflammatory and skin brightening", image: "/images/turmeric.jpg", icon: "🟡" },
+  { name: "Aloe Vera", benefit: "Hydrates and cools irritated skin", image: "/images/aloe.jpg", icon: "💚" }
 ];
 
 const bestSellers = [
@@ -236,21 +235,27 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 section-reveal">
-              {ingredients.map((ingredient, index) => (
-                <div
-                  key={ingredient.name}
-                  className="group glass-card overflow-hidden rounded-[20px] border border-white/60 bg-gradient-to-br from-white/80 to-[#f9f5ed]/60 p-5 shadow-soft hover:shadow-md transition-all duration-300 cursor-pointer hover:-translate-y-1"
-                  style={{ transitionDelay: `${index * 50}ms` }}
-                >
-                  <div className="mb-3 h-32 overflow-hidden rounded-[16px] bg-gradient-to-br from-sage-100 to-emerald-50 flex items-center justify-center">
-                    <span className="text-4xl group-hover:scale-110 transition-transform duration-300">{ingredient.icon}</span>
+            <div className="section-reveal overflow-x-auto pb-4 -mx-2 px-2">
+              <div className="flex gap-4 min-w-max">
+                {ingredients.map((ingredient, index) => (
+                  <div
+                    key={ingredient.name}
+                    className="group glass-card overflow-hidden rounded-[20px] border border-white/60 bg-gradient-to-br from-white/80 to-[#f9f5ed]/60 p-5 shadow-soft hover:shadow-md transition-all duration-300 cursor-pointer hover:-translate-y-1 flex-shrink-0 w-80"
+                    style={{ transitionDelay: `${index * 50}ms` }}
+                  >
+                    <div className="mb-3 h-32 overflow-hidden rounded-[16px] bg-gradient-to-br from-sage-100 to-emerald-50 flex items-center justify-center">
+                      <img 
+                        src={ingredient.image} 
+                        alt={ingredient.name}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                      />
+                    </div>
+                    <h3 className="font-display text-lg font-semibold text-sage-900">{ingredient.name}</h3>
+                    <p className="mt-2 text-sm text-sage-700 leading-relaxed">{ingredient.benefit}</p>
+                    <div className="mt-3 h-0.5 w-8 bg-gradient-to-r from-emerald-400 to-sage-400 group-hover:w-full transition-all duration-300" />
                   </div>
-                  <h3 className="font-display text-lg font-semibold text-sage-900">{ingredient.name}</h3>
-                  <p className="mt-2 text-sm text-sage-700 leading-relaxed">{ingredient.benefit}</p>
-                  <div className="mt-3 h-0.5 w-8 bg-gradient-to-r from-emerald-400 to-sage-400 group-hover:w-full transition-all duration-300" />
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </section>
