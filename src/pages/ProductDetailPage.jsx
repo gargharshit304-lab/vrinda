@@ -153,7 +153,7 @@ export default function ProductDetailPage() {
     }
   }, [similarProducts]);
 
-  const mainImage = product?.images?.[activeImageIndex] || product?.images?.[0];
+  const mainImage = product?.images?.[0] || product?.image || "/images/soap-golden-tiger.jpeg";
 
   const infoContent = useMemo(() => {
     if (!product) {
@@ -161,22 +161,32 @@ export default function ProductDetailPage() {
     }
 
     if (activeInfoTab === "how-to-use") {
-      return product.howToUse;
+      return product.howToUse || "Apply to clean skin, massage gently, and rinse with water";
     }
     if (activeInfoTab === "details") {
-      return `Type: ${product.type} | Weight/Volume: ${product.weightVolume} | Skin Type/Concern: ${product.skinConcern}`;
+      const type = product.type || "Natural Soap";
+      const weight = product.weightVolume || "100g";
+      const concern = product.skinConcern || "All skin types";
+      return `Type: ${type} | Weight/Volume: ${weight} | Skin Type/Concern: ${concern}`;
     }
-    return product.ingredients;
+    return product.ingredients || "100% plant-derived, natural ingredients";
   }, [activeInfoTab, product]);
 
   const displayPrice = useMemo(() => {
     if (!product) {
       return "Rs 0";
     }
-    const effective = product.onSale && product.salePercent > 0
-      ? Math.max(1, Math.round(product.price * (1 - product.salePercent / 100)))
-      : product.price;
-    return `Rs ${effective}`;
+    const basePrice = Number(product.price) || 0;
+    if (!basePrice) return "Rs 0";
+    
+    const onSale = Boolean(product.onSale);
+    const salePercent = Number(product.salePercent) || 0;
+    
+    if (onSale && salePercent > 0) {
+      const discounted = Math.max(1, Math.round(basePrice * (1 - salePercent / 100)));
+      return `Rs ${discounted}`;
+    }
+    return `Rs ${basePrice}`;
   }, [product]);
 
   const relatedProducts = useMemo(() => {
@@ -185,7 +195,12 @@ export default function ProductDetailPage() {
     }
 
     return allProducts
-      .filter((item) => item.id !== product.id && (item.category === product.category || item.type === product.type))
+      .filter((item) => {
+        if (item.id === product.id) return false;
+        const sameCategory = item.category && product.category && item.category === product.category;
+        const sameType = item.type && product.type && item.type === product.type;
+        return sameCategory || sameType;
+      })
       .sort((a, b) => {
         const aCategoryScore = a.category === product.category ? 2 : 0;
         const bCategoryScore = b.category === product.category ? 2 : 0;
@@ -324,15 +339,18 @@ export default function ProductDetailPage() {
               <img
                 key={mainImage}
                 src={mainImage}
-                alt={product.name}
+                alt={product?.name || "Product"}
                 className="h-[360px] w-full object-cover transition duration-700 ease-out group-hover:scale-105 sm:h-[460px]"
+                onError={(e) => {
+                  e.target.src = "/images/soap-golden-tiger.jpeg";
+                }}
               />
             </div>
 
             <div className="mt-4 grid grid-cols-4 gap-2 sm:gap-3">
-              {product.images.map((image, idx) => (
+              {(product?.images || []).map((image, idx) => (
                 <button
-                  key={image}
+                  key={`${image}-${idx}`}
                   type="button"
                   onClick={() => setActiveImageIndex(idx)}
                   className={`overflow-hidden rounded-xl border bg-white/80 transition duration-300 ${
@@ -341,7 +359,7 @@ export default function ProductDetailPage() {
                       : "border-sage-200/80 hover:-translate-y-0.5 hover:border-sage-300"
                   }`}
                 >
-                  <img src={image} alt={`${product.name} ${idx + 1}`} className="h-20 w-full object-cover" />
+                  <img src={image || "/images/soap-golden-tiger.jpeg"} alt={`${product?.name || "Product"} ${idx + 1}`} className="h-20 w-full object-cover" />
                 </button>
               ))}
             </div>
@@ -350,15 +368,15 @@ export default function ProductDetailPage() {
           <div className="space-y-5">
             <section className="glass-card rounded-3xl border border-white/70 bg-white/65 p-6 shadow-soft sm:p-8">
               <p className="text-[0.7rem] font-bold uppercase tracking-[0.24em] text-sage-700/80">Vrinda Signature</p>
-              <h1 className="mt-2 font-display text-4xl font-semibold leading-tight text-sage-900 sm:text-5xl">{product.name}</h1>
-              <p className="mt-2 text-sm font-semibold tracking-[0.02em] text-sage-700">{product.tagline}</p>
+              <h1 className="mt-2 font-display text-4xl font-semibold leading-tight text-sage-900 sm:text-5xl">{product?.name || "Premium Product"}</h1>
+              <p className="mt-2 text-sm font-semibold tracking-[0.02em] text-sage-700">{product?.tagline || "Premium herbal essential"}</p>
 
               <div className="mt-4 flex items-center gap-3">
                 <p className="text-2xl font-extrabold text-sage-800">{displayPrice}</p>
                 <div className="flex items-center gap-1.5 rounded-full bg-sage-700/8 px-3 py-1 text-xs font-bold text-sage-700">
                   <span className="text-amber-500">★★★★★</span>
-                  <span>{product.rating}</span>
-                  <span className="text-sage-600/80">({product.reviewCount})</span>
+                  <span>{product?.rating || 4.5}</span>
+                  <span className="text-sage-600/80">({product?.reviewCount || 0})</span>
                 </div>
               </div>
 
@@ -368,13 +386,13 @@ export default function ProductDetailPage() {
                 </p>
               ) : null}
 
-              <p className="mt-4 text-sm leading-relaxed text-sage-700">{product.description}</p>
+              <p className="mt-4 text-sm leading-relaxed text-sage-700">{product?.description || "Premium herbal product for natural skincare."}</p>
 
               <ul className="mt-5 grid gap-2 text-sm font-medium text-sage-800 sm:grid-cols-2">
-                {product.features.map((feature) => (
-                  <li key={feature} className="flex items-center gap-2 rounded-xl bg-[#f4ecde]/80 px-3 py-2">
+                {(product?.features || []).map((feature, idx) => (
+                  <li key={`${feature}-${idx}`} className="flex items-center gap-2 rounded-xl bg-[#f4ecde]/80 px-3 py-2">
                     <span className="inline-block h-2 w-2 rounded-full bg-sage-600" />
-                    {feature}
+                    {feature || "Premium Quality"}
                   </li>
                 ))}
               </ul>
@@ -438,21 +456,27 @@ export default function ProductDetailPage() {
                 ref={scrollContainerRef}
                 className="scrollbar-hide flex gap-5 overflow-x-auto scroll-smooth"
               >
-                {fallbackSimilarProducts.map((item) => {
-                  const itemPrice = item.onSale && item.salePercent > 0
-                    ? Math.max(1, Math.round(item.price * (1 - item.salePercent / 100)))
-                    : item.price;
+                {fallbackSimilarProducts.map((item, index) => {
+                  if (!item) return null;
+                  
+                  const basePrice = Number(item.price) || 0;
+                  const onSale = Boolean(item.onSale);
+                  const salePercent = Number(item.salePercent) || 0;
+                  
+                  const itemPrice = onSale && salePercent > 0 && basePrice > 0
+                    ? Math.max(1, Math.round(basePrice * (1 - salePercent / 100)))
+                    : basePrice;
 
                   return (
                     <article
-                      key={item.id}
+                      key={item?.id || `product-${index}`}
                       role="button"
                       tabIndex={0}
-                      onClick={() => navigate(`/product/${item.id}`)}
+                      onClick={() => navigate(`/product/${item?.id}`)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          navigate(`/product/${item.id}`);
+                          navigate(`/product/${item?.id}`);
                         }
                       }}
                       className="group/card relative min-w-[260px] flex-shrink-0 overflow-hidden rounded-2xl border border-sage-100/90 bg-[#faf7f0]/92 transition-all duration-300 hover:shadow-lg hover:shadow-sage-800/15"
@@ -460,17 +484,20 @@ export default function ProductDetailPage() {
                       {/* Image Container */}
                       <div className="h-40 overflow-hidden bg-white/50">
                         <img
-                          src={item.images?.[0] || item.mainImageDataUrl || item.imageDataUrl}
-                          alt={item.name}
+                          src={item?.images?.[0] || item?.image || item?.mainImageDataUrl || item?.imageDataUrl || "/images/soap-golden-tiger.jpeg"}
+                          alt={item?.name || "Product"}
                           className="h-full w-full object-cover transition-transform duration-500 group-hover/card:scale-110"
+                          onError={(e) => {
+                            e.target.src = "/images/soap-golden-tiger.jpeg";
+                          }}
                         />
                       </div>
 
                       {/* Content Container */}
                       <div className="space-y-2 p-4">
-                        <p className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-sage-700/75">{item.category}</p>
-                        <h3 className="line-clamp-1 text-sm font-extrabold text-sage-800">{item.name}</h3>
-                        <p className="line-clamp-2 text-xs text-sage-600">{item.tagline || item.copy}</p>
+                        <p className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-sage-700/75">{item?.category || "Product"}</p>
+                        <h3 className="line-clamp-1 text-sm font-extrabold text-sage-800">{item?.name || "Product"}</h3>
+                        <p className="line-clamp-2 text-xs text-sage-600">{item?.tagline || item?.copy || "Premium product"}</p>
                         <p className="pt-1 text-sm font-extrabold text-sage-800">Rs {itemPrice}</p>
                       </div>
 

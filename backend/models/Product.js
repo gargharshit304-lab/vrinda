@@ -23,6 +23,11 @@ const productSchema = new mongoose.Schema(
       default: "",
       trim: true
     },
+    tagline: {
+      type: String,
+      default: "",
+      trim: true
+    },
     description: {
       type: String,
       default: ""
@@ -44,6 +49,47 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0
+    },
+    onSale: {
+      type: Boolean,
+      default: false
+    },
+    salePercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    },
+    rating: {
+      type: Number,
+      default: 4.5,
+      min: 0,
+      max: 5
+    },
+    reviewCount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    ingredients: {
+      type: String,
+      default: "100% plant-derived, natural ingredients"
+    },
+    howToUse: {
+      type: String,
+      default: "Apply to clean skin, massage gently, and rinse with water"
+    },
+    features: {
+      type: [String],
+      default: ["Natural & Organic", "Cruelty Free", "Eco-friendly", "Dermatologist Tested"]
+    },
+    weightVolume: {
+      type: String,
+      default: "100g/100ml"
+    },
+    skinConcern: {
+      type: String,
+      default: "All skin types"
     },
     isDeleted: {
       type: Boolean,

@@ -18,7 +18,24 @@ const normalizeApiProduct = (product) => {
     _id: product._id || id,
     image: product.image || product.images?.[0] || "",
     images: Array.isArray(product.images) ? product.images.filter(Boolean) : product.image ? [product.image] : [],
-    status: product.status || "active"
+    status: product.status || "active",
+    // Add safe defaults for all fields
+    name: product.name || "Unnamed Product",
+    tagline: product.tagline || product.copy || "Premium herbal essential",
+    description: product.description || "Premium herbal product from Vrinda",
+    category: product.category || "All Products",
+    type: product.type || "",
+    price: Number(product.price) || 0,
+    stock: Number(product.stock || product.unitsAvailable) || 0,
+    onSale: Boolean(product.onSale),
+    salePercent: Number(product.salePercent) || 0,
+    rating: Number(product.rating) || 4.5,
+    reviewCount: Number(product.reviewCount) || 0,
+    ingredients: product.ingredients || "100% plant-derived, natural ingredients",
+    howToUse: product.howToUse || "Apply to clean skin, massage gently, and rinse with water",
+    features: Array.isArray(product.features) ? product.features : ["Natural & Organic", "Cruelty Free", "Eco-friendly", "Dermatologist Tested"],
+    weightVolume: product.weightVolume || "100g/100ml",
+    skinConcern: product.skinConcern || "All skin types"
   };
 };
 
