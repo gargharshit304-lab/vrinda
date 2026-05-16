@@ -326,11 +326,27 @@ export default function HomePage() {
                 <h4 className="font-display text-lg font-semibold mb-4">Vrinda</h4>
                 <p className="text-sm text-white/70 leading-relaxed">Premium herbal essentials for mindful living and botanical self-care.</p>
                 <div className="flex gap-3 mt-4">
-                  {["f", "i", "t", "p"].map((icon) => (
-                    <a key={icon} href="#" className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-emerald-600 transition">
-                      {icon}
-                    </a>
-                  ))}
+                  {["f", "i", "t", "p"].map((icon) => {
+                    if (icon === "i") {
+                      return (
+                        <a
+                          key={icon}
+                          href="https://www.instagram.com/vrinda.organics/?hl=en"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-emerald-600 transition"
+                        >
+                          {icon}
+                        </a>
+                      );
+                    }
+
+                    return (
+                      <a key={icon} href="#" className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-emerald-600 transition">
+                        {icon}
+                      </a>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -391,9 +407,9 @@ export default function HomePage() {
                 <a href="#" className="hover:text-white transition">
                   Terms of Service
                 </a>
-                <a href="#" className="hover:text-white transition">
+                <Link to="/contact" className="hover:text-white transition">
                   Contact
-                </a>
+                </Link>
               </div>
             </div>
 
