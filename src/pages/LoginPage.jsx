@@ -5,9 +5,15 @@ import { apiRequest } from "../data/apiClient";
 import { setAuthSession } from "../data/authStorage";
 
 const slides = [
-  "https://images.unsplash.com/photo-1608571423539-e951a5f2f25f?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1528219089976-0757f9fbb6bb?auto=format&fit=crop&w=1200&q=80",
-  "https://images.unsplash.com/photo-1496417263034-38ec4f0b665a?auto=format&fit=crop&w=1200&q=80"
+  "/images/login_1.jpg",
+  "/images/login_2.jpg",
+  "/images/login_3.jpg"
+];
+
+const slideTexts = [
+  "Handcrafted Botanical Rituals",
+  "Luxury Wellness Inspired by Nature",
+  "Pure Ingredients. Timeless Care."
 ];
 
 export default function LoginPage() {
@@ -48,7 +54,7 @@ export default function LoginPage() {
   useEffect(() => {
     const timer = window.setInterval(() => {
       setSlideIndex((current) => (current + 1) % slides.length);
-    }, 3000);
+    }, 6000); // show each slide ~6s for a calm, premium feel
     return () => window.clearInterval(timer);
   }, []);
 
@@ -218,18 +224,49 @@ export default function LoginPage() {
     <div className="pb-10">
       <SiteNav />
       <main className="mx-auto mt-6 grid w-[min(1280px,94vw)] overflow-hidden rounded-[32px] border border-sage-200/80 bg-white/50 shadow-soft backdrop-blur lg:grid-cols-[1.1fr_0.9fr]">
-        <section className="relative min-h-[380px] overflow-hidden">
-          {slides.map((slide, idx) => (
-            <img
-              key={slide}
-              src={slide}
-              alt="Vrinda showcase"
-              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
-                idx === slideIndex ? "opacity-100" : "opacity-0"
-              }`}
-            />
-          ))}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/10 to-black/20" />
+        <section className="relative min-h-[380px] overflow-hidden p-0">
+          <style>{`
+            .kenburns { transform-origin: center; will-change: transform; }
+            .kenburns-active { animation-name: kenburns; animation-duration: 12s; animation-timing-function: cubic-bezier(0.4,0,0.2,1); animation-fill-mode: both; }
+            @keyframes kenburns { from { transform: scale(1) translateY(0); } to { transform: scale(1.06) translateY(-1.5%); } }
+            /* Reduce motion for users who prefer it */
+            @media (prefers-reduced-motion: reduce) {
+              .kenburns-active { animation: none !important; }
+              .slide-fade { transition: opacity 600ms ease-in-out !important; }
+            }
+            /* Slight performance hint for mobile */
+            .slide-fade, .kenburns { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+          `}</style>
+
+          <div className="relative h-full w-full overflow-hidden rounded-l-[32px]">
+            {slides.map((slide, idx) => {
+              const active = idx === slideIndex;
+              return (
+                <div
+                  key={slide}
+                  className={`absolute inset-0 flex items-center justify-center ${active ? "z-10" : "z-0 pointer-events-none"}`}
+                  style={{ transition: "opacity 1200ms cubic-bezier(0.4,0,0.2,1)" }}
+                >
+                  <img
+                    src={slide}
+                    alt={`Vrinda slide ${idx + 1}`}
+                    className={`absolute inset-0 h-full w-full object-cover object-center kenburns ${active ? "kenburns-active" : ""}`}
+                    style={{ opacity: active ? 1 : 0, transition: "opacity 1200ms cubic-bezier(0.4,0,0.2,1)" }}
+                  />
+
+                  {/* dark overlay for text readability */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/25 to-black/30 transition-opacity" style={{ opacity: active ? 1 : 0.85, transition: "opacity 1200ms cubic-bezier(0.4,0,0.2,1)" }} />
+
+                  {/* Slide text */}
+                  <div className="relative z-20 max-w-[80%] text-center px-6">
+                    <h3 className="font-display text-2xl sm:text-3xl md:text-4xl text-white font-bold tracking-wide leading-tight" style={{ textShadow: "0 6px 18px rgba(0,0,0,0.4)" }}>
+                      {slideTexts[idx]}
+                    </h3>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
 
         <section className="relative bg-white/80 p-6 sm:p-10">
