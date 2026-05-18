@@ -22,9 +22,11 @@ export default function SiteNav() {
   const [cartPulse, setCartPulse] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileSearchExpanded, setMobileSearchExpanded] = useState(false);
   const [searchProducts, setSearchProducts] = useState([]);
   const profileRef = useRef(null);
   const searchRef = useRef(null);
+  const mobileSearchRef = useRef(null);
   const previousCartCountRef = useRef(0);
 
   useEffect(() => {
@@ -270,22 +272,27 @@ export default function SiteNav() {
 
   return (
     <header
-      className={`sticky top-3 z-30 mx-auto w-[min(1120px,94vw)] rounded-[28px] border px-4 py-3 backdrop-blur-2xl transition-all duration-300 ease-in-out md:px-5 ${
+      className={`sticky top-3 z-30 mx-auto w-[min(1120px,94vw)] rounded-[28px] border px-4 py-2.5 backdrop-blur-2xl transition-all duration-300 ease-in-out md:px-5 md:py-3 ${
         scrolled
           ? "border-white/70 bg-white/78 shadow-[0_20px_50px_rgba(31,61,43,0.16)]"
           : "border-white/40 bg-white/55 shadow-[0_12px_35px_rgba(31,61,43,0.08)]"
       }`}
     >
-      <div className="flex items-center justify-between gap-4">
-        <Link to="/" className="flex items-start gap-3" onClick={() => setMobileOpen(false)}>
-          <span className="mt-1 grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-sage-700 to-sage-400 text-white shadow-md shadow-sage-800/15">
-            <LeafIcon />
+      <div className="flex items-center justify-between gap-2 md:gap-4">
+        <Link to="/" className="flex items-start gap-2 md:gap-3" onClick={() => {
+          setMobileOpen(false);
+          setMobileSearchExpanded(false);
+        }}>
+          <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-sage-700 to-sage-400 text-white shadow-md shadow-sage-800/15 md:h-10 md:w-10 md:rounded-2xl">
+            <span className="h-5 w-5 md:h-6 md:w-6">
+              <LeafIcon />
+            </span>
           </span>
           <span className="flex flex-col">
-            <span className="font-display text-[2.05rem] font-semibold tracking-[0.08em] text-[#1f3d2b] md:text-[2.25rem]">
+            <span className="font-display text-lg font-semibold tracking-[0.08em] text-[#1f3d2b] md:text-[2.05rem]">
               Vrinda
             </span>
-            <span className="text-[0.68rem] font-extrabold uppercase tracking-[0.34em] text-sage-700/75">
+            <span className="text-[0.55rem] font-extrabold uppercase tracking-[0.34em] text-sage-700/75 md:text-[0.68rem]">
               Botanical Rituals
             </span>
           </span>
@@ -511,7 +518,7 @@ export default function SiteNav() {
           )}
         </div>
 
-        <div className="flex items-center gap-2 md:hidden">
+        <div className="flex items-center gap-1.5 md:gap-2">
           {!isAdminUser ? (
             <div data-cart-dropdown-root className="relative">
               <CartLink count={cartCount} pulse={cartPulse} onClick={toggleCartDropdown} />
@@ -529,12 +536,27 @@ export default function SiteNav() {
             </div>
           ) : null}
 
+          {currentUser && (
+            <Link
+              to="/profile"
+              className="grid h-9 w-9 place-items-center rounded-full border border-sage-200/80 bg-white/75 text-xs font-extrabold text-white shadow-sm transition duration-300 hover:-translate-y-0.5 hover:bg-white hover:shadow-md md:h-10 md:w-10 md:rounded-full"
+              title={userName}
+            >
+              <span className="grid h-full w-full place-items-center rounded-full bg-gradient-to-br from-sage-700 to-sage-500">
+                {initials}
+              </span>
+            </Link>
+          )}
+
           <button
             type="button"
-            className="inline-flex items-center justify-center rounded-full border border-sage-200/70 bg-white/60 p-2 text-sage-800 transition duration-300 ease-in-out hover:-translate-y-0.5 hover:bg-white/80 hover:shadow-md"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-sage-200/70 bg-white/60 p-1.5 text-sage-800 transition duration-300 ease-in-out hover:-translate-y-0.5 hover:bg-white/80 hover:shadow-md md:hidden"
             aria-label="Toggle navigation menu"
             aria-expanded={mobileOpen}
-            onClick={() => setMobileOpen((value) => !value)}
+            onClick={() => {
+              setMobileOpen((value) => !value);
+              setMobileSearchExpanded(false);
+            }}
           >
             <span className="relative h-5 w-5">
               <span
@@ -563,30 +585,87 @@ export default function SiteNav() {
         }`}
       >
         <nav className="flex flex-col gap-2 pb-1 pt-1">
-          <form onSubmit={handleSearchSubmit} className="relative mb-1">
-            <label className="sr-only" htmlFor="mobile-navbar-search">
-              Search products
-            </label>
-            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sage-700/70">
-              <SearchIcon />
-            </span>
-            <input
-              id="mobile-navbar-search"
-              type="search"
-              value={searchInput}
-              onChange={handleSearchChange}
-              onFocus={() => setSearchOpen(true)}
-              placeholder="Search products"
-              className="w-full rounded-full border border-sage-200/80 bg-white/80 py-3 pl-11 pr-4 text-sm font-medium text-sage-800 shadow-sm outline-none transition duration-300 placeholder:text-sage-600/60 focus:border-sage-400 focus:bg-white focus:shadow-md"
-              autoComplete="off"
-            />
-          </form>
+          <div className="relative mb-2" ref={mobileSearchRef}>
+            <button
+              type="button"
+              onClick={() => setMobileSearchExpanded(!mobileSearchExpanded)}
+              className="flex w-full items-center gap-3 rounded-2xl border border-sage-200/80 bg-white/75 px-4 py-3 text-sm font-medium text-sage-800 transition duration-300 hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
+              aria-label="Search products"
+            >
+              <span className="h-5 w-5 shrink-0">
+                <SearchIcon />
+              </span>
+              <span className={`transition-all duration-300 ${mobileSearchExpanded ? "opacity-0" : "opacity-100"}`}>Search products</span>
+            </button>
 
-          <MobileLink to="/" onClick={() => setMobileOpen(false)}>
+            {mobileSearchExpanded && (
+              <form onSubmit={handleSearchSubmit} className="absolute left-0 right-0 top-0 z-50">
+                <input
+                  type="search"
+                  value={searchInput}
+                  onChange={handleSearchChange}
+                  onFocus={() => setSearchOpen(true)}
+                  placeholder="Search products"
+                  autoFocus
+                  className="w-full rounded-2xl border border-sage-400 bg-white py-3 pl-12 pr-4 text-sm font-medium text-sage-800 shadow-md outline-none transition duration-300 focus:border-sage-500 focus:shadow-lg"
+                  autoComplete="off"
+                />
+                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sage-700/70 h-4 w-4">
+                  <SearchIcon />
+                </span>
+              </form>
+            )}
+
+            {mobileSearchExpanded && searchOpen && searchResults.length > 0 ? (
+              <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-3xl border border-sage-100/90 bg-[#faf7f1]/98 p-2 shadow-[0_20px_40px_rgba(24,47,33,0.16)] backdrop-blur-xl">
+                <div className="px-3 pb-2 pt-1 text-[0.65rem] font-bold uppercase tracking-[0.22em] text-sage-700/70">
+                  Suggestions
+                </div>
+                <div className="space-y-1">
+                  {searchResults.map((product) => (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => handleSuggestionClick(product)}
+                      className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left transition duration-200 hover:bg-sage-700/8"
+                    >
+                      <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl border border-sage-100 bg-white">
+                        <img src={product.images?.[0] || product.mainImageDataUrl || product.imageDataUrl} alt={product.name} className="h-full w-full object-cover" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-sage-800">{product.name}</span>
+                        <span className="block text-xs text-sage-600">{product.category}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <MobileLink to="/" onClick={() => {
+            setMobileOpen(false);
+            setMobileSearchExpanded(false);
+          }}>
             Home
           </MobileLink>
-          <MobileLink to="/shop" onClick={() => setMobileOpen(false)}>
+          <MobileLink to="/shop" onClick={() => {
+            setMobileOpen(false);
+            setMobileSearchExpanded(false);
+          }}>
             Shop
+          </MobileLink>
+          <MobileLink to="/about" onClick={() => {
+            setMobileOpen(false);
+            setMobileSearchExpanded(false);
+          }}>
+            About
+          </MobileLink>
+          <MobileLink to="/contact" onClick={() => {
+            setMobileOpen(false);
+            setMobileSearchExpanded(false);
+          }}>
+            Contact
           </MobileLink>
           {!isAdminUser ? (
             <button
@@ -598,58 +677,75 @@ export default function SiteNav() {
               <span className="inline-flex items-center gap-2">
                 <CartIcon />
                 <span>Cart</span>
+                {cartCount > 0 && <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-sage-700 text-xs font-bold text-white">{cartCount}</span>}
               </span>
             </button>
           ) : null}
-          <MobileLink to="/about" onClick={() => setMobileOpen(false)}>
-            About
-          </MobileLink>
-          <MobileLink to="/contact" onClick={() => setMobileOpen(false)}>
-            Contact
-          </MobileLink>
           {!currentUser ? (
-            <div className="mt-1 grid grid-cols-2 gap-2">
+            <div className="mt-3 space-y-2 border-t border-sage-100 pt-3">
               <Link
                 to="/login"
                 onClick={() => setMobileOpen(false)}
-                className="rounded-2xl border border-sage-200/80 bg-white/75 px-4 py-3 text-center text-sm font-semibold tracking-[0.03em] text-sage-800 transition duration-300 hover:bg-white"
+                className="block rounded-2xl border border-sage-200/80 bg-white/75 px-4 py-3 text-center text-sm font-semibold tracking-[0.03em] text-sage-800 transition duration-300 hover:bg-white"
               >
                 Login
               </Link>
               <Link
                 to="/login?mode=signup"
                 onClick={() => setMobileOpen(false)}
-                className="rounded-2xl bg-gradient-to-r from-sage-800 to-sage-600 px-4 py-3 text-center text-sm font-bold tracking-[0.03em] text-white shadow-[0_12px_22px_rgba(31,61,43,0.26)] transition duration-300 hover:-translate-y-0.5"
+                className="block rounded-2xl bg-gradient-to-r from-sage-800 to-sage-600 px-4 py-3 text-center text-sm font-bold tracking-[0.03em] text-white shadow-[0_12px_22px_rgba(31,61,43,0.26)] transition duration-300 hover:-translate-y-0.5"
               >
                 Sign Up
               </Link>
             </div>
           ) : (
-            <div className="mt-1 rounded-2xl border border-sage-200/80 bg-white/75 p-2">
-              <div className="mb-1 flex items-center gap-2 rounded-xl px-2 py-2">
+            <div className="mt-3 space-y-2 border-t border-sage-100 pt-3">
+              <div className="flex items-center gap-2 rounded-xl px-2 py-2">
                 <span className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-sage-700 to-sage-500 text-xs font-extrabold text-white">
                   {initials}
                 </span>
                 <p className="text-sm font-semibold text-sage-800">{userName}</p>
               </div>
               <div className="space-y-1">
-                <MobileLink to="/profile" onClick={() => setMobileOpen(false)}>
+                <MobileLink to="/profile" onClick={() => {
+                  setMobileOpen(false);
+                  setMobileSearchExpanded(false);
+                }}>
                   My Profile
                 </MobileLink>
-                <MobileLink to="/orders" onClick={() => setMobileOpen(false)}>
+                <MobileLink to="/orders" onClick={() => {
+                  setMobileOpen(false);
+                  setMobileSearchExpanded(false);
+                }}>
                   Orders
                 </MobileLink>
-                <MobileLink to="/wishlist" onClick={() => setMobileOpen(false)}>
+                <MobileLink to="/wishlist" onClick={() => {
+                  setMobileOpen(false);
+                  setMobileSearchExpanded(false);
+                }}>
                   Wishlist
                 </MobileLink>
-                <MobileLink to="/profile?tab=settings" onClick={() => setMobileOpen(false)}>
+                <MobileLink to="/profile?tab=settings" onClick={() => {
+                  setMobileOpen(false);
+                  setMobileSearchExpanded(false);
+                }}>
                   Settings
                 </MobileLink>
+                {isAdminUser ? (
+                  <MobileLink to="/admin" onClick={() => {
+                    setMobileOpen(false);
+                    setMobileSearchExpanded(false);
+                  }}>
+                    Admin Dashboard
+                  </MobileLink>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => {
                     handleLogout();
                     navigate("/");
+                    setMobileOpen(false);
+                    setMobileSearchExpanded(false);
                   }}
                   className="w-full rounded-2xl border border-rose-200/80 bg-rose-50 px-4 py-3 text-left text-sm font-semibold text-rose-700 transition duration-300 hover:bg-rose-100"
                 >
@@ -657,7 +753,6 @@ export default function SiteNav() {
                 </button>
               </div>
             </div>
-
           )}
         </nav>
       </div>
@@ -855,14 +950,14 @@ function CartLink({ count, pulse, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`relative grid h-10 w-10 place-items-center rounded-full border border-sage-200/80 bg-white/75 text-sage-800 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:bg-white hover:shadow-md ${
+      className={`relative grid h-9 w-9 place-items-center rounded-full border border-sage-200/80 bg-white/75 text-sage-800 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:bg-white hover:shadow-md md:h-10 md:w-10 ${
         pulse ? "cart-icon-pulse" : ""
       }`}
       aria-label={`Cart${count > 0 ? `, ${count} items` : ""}`}
     >
       <CartIcon />
       {count > 0 ? (
-        <span className={`absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-sage-800 px-1 text-[0.65rem] font-extrabold leading-none text-white shadow-[0_6px_12px_rgba(31,61,43,0.28)] ${pulse ? "cart-badge-pulse" : ""}`}>
+        <span className={`absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full bg-sage-800 px-1 text-[0.6rem] font-extrabold leading-none text-white shadow-[0_6px_12px_rgba(31,61,43,0.28)] md:text-[0.65rem] ${pulse ? "cart-badge-pulse" : ""}`}>
           {count > 99 ? "99+" : count}
         </span>
       ) : null}
